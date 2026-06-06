@@ -13,7 +13,7 @@ It's designed for people who are comfortable with AI coding tools (Claude Code, 
 - **A Lab** — your home base for ideation and analysis (`CLAUDE.md` + `Log/` + `Sessions/`).
 - **Recall** — semantic search over everything in your workspace plus the agent's long-term memory. Runs **fully locally** (no API key needed).
 - **Seeded memory** — a starter set of solid work-habit lessons the agent follows (truth over reassurance, verify before "done," one question at a time, …). It grows as you work.
-- **Skills** — `/setup` (personalize), `/kickoff` (shape a raw idea into a clear brief), `/new-project` (graduate it into its own workspace). Graduated projects also get `/plan`, `/audit`, `/wrap`.
+- **Skills** — `/setup` (personalize), `/kickoff` (shape a raw idea into a clear brief), `/new-project` (graduate it into its own workspace), plus the full work ceremonies `/plan` (structured planning + a 3-reviewer adversarial pass) · `/audit` (drift audit) · `/wrap` (clean session close) — available both in the Lab and in every graduated project.
 - **A project template** — every graduated project is a clean, self-contained git repo with the full rig, a "genome" (INTENT/SPEC), a recall index, hooks, and a commit drift-gate.
 
 ---
@@ -21,9 +21,12 @@ It's designed for people who are comfortable with AI coding tools (Claude Code, 
 ## Requirements
 
 - **Git** and **Python 3.9+** (`git --version`, `python3 --version`).
-- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** (or a compatible agent CLI) — this is the agent that reads `CLAUDE.md`, runs the skills, and fires the hooks.
+- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** — the agent that reads `CLAUDE.md`, runs the skills, and fires the recall hooks. (See "A note on agents" below.)
 - Internet on first run (the recall engine downloads a small embedding model, ~100MB, once).
 - No paid API keys are required for the core experience. (Optional provider keys go in `.env` if you want the agent to use them for your own tasks.)
+
+### A note on agents (Claude Code today)
+Lab Zero is currently built **for Claude Code**: the skills are Claude Code `SKILL.md` files and the recall automation runs through Claude Code `settings.json` hooks. The recall **engine** is a plain Python CLI (`bash scripts/recall.sh …`) that works under any agent — so memory and search still function elsewhere (e.g. Codex) — but the skills and the automatic session-start/stop hooks won't load there. Making the rig **harness-agnostic** (skills + hooks portable across agents) is on the roadmap; for now, use Claude Code for the full experience.
 
 ---
 

@@ -23,6 +23,8 @@ Fill this in: the one-paragraph "what __PROJECT__ is and why it exists." Keep th
 - Write progressive notes to `Sessions/YYYY-MM-DD_NNN_<slug>.md` (numbering starts at 001 for this project).
 - Tracking: `Log/{STATUS,TASKS,PLAN,DECISIONS}.md`. The pre-commit drift-gate requires all four to carry the literal `session N` before a new session-note commit lands.
 - Skills: `/wrap` (close a session), `/plan` (structured planning), `/audit` (drift audit).
+- Build discipline: **plan non-trivial work** with `/plan` (it runs a 3-reviewer adversarial pass); **lean test-first** (TDD) wherever behavior is checkable — a failing-then-passing test is the proof, not eyeballing.
+- **One task per session**, then `/wrap`.
 
 ## Recall
 `bash scripts/recall.sh "<query>"` — semantic search over this workspace + its seeded auto-memory. `reindex` after material doc changes. Config: [recall.config.json](recall.config.json).

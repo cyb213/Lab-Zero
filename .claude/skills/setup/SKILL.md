@@ -8,6 +8,7 @@ description: First-run personalization for a freshly cloned Lab — interview th
 The user just cloned this Lab and needs to make it theirs. Your job: interview them and write a complete `IDENTITY.md`. Dogfood the working style this whole system teaches — **one question at a time, plain language, no batching.**
 
 ## Before you start
+- **Ensure the Lab is bootstrapped.** If there's no `.venv/` in the workspace, run `bash bootstrap.sh` and wait for it to finish (it builds the recall engine, wires the hooks, and seeds memory — the reindex at the end of this skill depends on it).
 - Read the current `IDENTITY.md` — it's the fill-in template, and its sections are exactly what you're filling.
 - If it's already filled (no `<…>` placeholders left), tell the user it looks done and ask if they want to revise a specific section instead of redoing it.
 - Briefly tell the user what's about to happen: "I'll ask you a handful of short questions, then write your IDENTITY.md. Ready?"
