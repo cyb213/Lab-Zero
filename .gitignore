@@ -1,0 +1,22 @@
+# secrets — never commit
+.env
+*.env
+
+# recall index + memory artifacts (rebuilt locally, can be large)
+memory/*.db
+memory/*.jsonl
+memory/*-state.json
+
+# python
+__pycache__/
+*.pyc
+.venv*/
+
+# build artifacts — never commit (engine uses pip sqlite-vec, no vendored binary)
+*.so
+*.whl
+.tmp*/
+dist/
+
+# os
+.DS_Store

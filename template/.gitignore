@@ -1,0 +1,21 @@
+# secrets — never commit
+.env
+*.env
+
+# recall index + memory artifacts (rebuilt locally)
+memory/*.db
+memory/*.jsonl
+memory/*-state.json
+
+# python / venv
+__pycache__/
+*.pyc
+.venv*/
+
+# build artifacts
+*.so
+*.whl
+.tmp*/
+
+# os
+.DS_Store

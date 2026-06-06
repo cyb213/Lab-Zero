@@ -1,0 +1,15 @@
+{
+  "root": ".",
+  "source": "lab",
+  "index_globs": [
+    "Log/**/*.md",
+    "Sessions/**/*.md",
+    "Source/**/*.md",
+    "IDENTITY.md",
+    "CLAUDE.md",
+    "Projects-REGISTRY.md"
+  ],
+  "id_search_dirs": ["Log", "Sessions", "Source"],
+  "auto_memory": "runtime",
+  "tracking_files": ["Log/STATUS.md"]
+}

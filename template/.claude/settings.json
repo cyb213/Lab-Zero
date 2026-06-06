@@ -1,0 +1,34 @@
+{
+  "//": "Hook wiring for a stamped project. new-project.sh replaces __WORKSPACE__ with the absolute project root. Merge into any existing settings rather than clobbering.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "bash __WORKSPACE__/.claude/hooks/protect-files.sh" }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash __WORKSPACE__/scripts/hooks/recall-session-start.sh" }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash __WORKSPACE__/scripts/hooks/recall-user-prompt.sh" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash __WORKSPACE__/scripts/hooks/recall-stop.sh" }
+        ]
+      }
+    ]
+  }
+}

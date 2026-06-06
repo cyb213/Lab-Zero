@@ -1,0 +1,34 @@
+{
+  "//": "Hook wiring for your Lab. bootstrap.sh replaces __WORKSPACE__ with the absolute path of your clone. If you move the clone, re-run bootstrap.sh (or re-substitute the path).",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "bash __WORKSPACE__/.claude/hooks/protect-files.sh" }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash __WORKSPACE__/scripts/hooks/recall-session-start.sh" }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash __WORKSPACE__/scripts/hooks/recall-user-prompt.sh" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash __WORKSPACE__/scripts/hooks/recall-stop.sh" }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# Tracking-drift gate (generalized from Ray_OS S171/S298).
+#
+# When a commit ADDS a new Sessions/YYYY-MM-DD_NNN_*.md, every configured
+# tracking file must contain the literal "session N" (no zero-padding).
+# Otherwise abort. Mid-session commits that add no session note aren't gated;
+# modifications to existing notes aren't gated — only ADDs.
+#
+# Also: a newly-added note must not reuse an NNN already used by a different
+# committed note (parallel-session number-collision guard).
+#
+# Tracking files come from recall.config.json `tracking_files` (default the
+# four-file convention). Bypass with `git commit --no-verify` only for a real
+# reason (emergency fix, backfill, tooling).
+
+set -euo pipefail
+
+new_sessions=$(
+  git diff --cached --name-only --diff-filter=A 2>/dev/null \
+    | grep -E '^Sessions/[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{3}_.*\.md$' || true
+)
+[ -z "$new_sessions" ] && exit 0
+
+repo_root=$(git rev-parse --show-toplevel)
+
+# Tracking-file list from config (via recall_lib --env); fall back to the
+# four-file convention if the engine isn't present.
+VENV_PY="$repo_root/.venv/bin/python"
+[ -x "$VENV_PY" ] || VENV_PY="python3"
+RECALL_TRACKING_FILES=""
+if [ -f "$repo_root/scripts/recall_lib.py" ]; then
+  eval "$("$VENV_PY" "$repo_root/scripts/recall_lib.py" --env 2>/dev/null | grep '^export RECALL_TRACKING_FILES=')" || true
+fi
+[ -z "${RECALL_TRACKING_FILES:-}" ] && RECALL_TRACKING_FILES="Log/STATUS.md Log/TASKS.md Log/PLAN.md Log/DECISIONS.md"
+read -r -a tracking <<< "$RECALL_TRACKING_FILES"
+
+fails=0
+while IFS= read -r note; do
+  base=$(basename "$note")
+  num_padded=$(echo "$base" | sed -nE 's/^[0-9]{4}-[0-9]{2}-[0-9]{2}_([0-9]{3})_.*/\1/p')
+  num=$(echo "$num_padded" | sed 's/^0*//')
+  [ -z "$num" ] && num=0
+  marker="session $num"
+
+  # Parallel-session collision guard: one session = one note file.
+  if [ "$num" -gt 0 ]; then
+    clash=$(
+      git ls-tree -r --name-only HEAD -- Sessions/ 2>/dev/null \
+        | grep -E "^Sessions/[0-9]{4}-[0-9]{2}-[0-9]{2}_0*${num}_.*\.md$" \
+        | grep -vF "$note" || true
+    )
+    if [ -n "$clash" ]; then
+      echo "collision: session $num already used by committed note: $clash" >&2
+      echo "  (adding $note) — parallel-session number clash; pick the next free number." >&2
+      fails=$((fails + 1))
+    fi
+  fi
+
+  for f in "${tracking[@]}"; do
+    if ! grep -qF "$marker" "$repo_root/$f" 2>/dev/null; then
+      echo "drift: $f missing '$marker' (from new session note $note)" >&2
+      fails=$((fails + 1))
+    fi
+  done
+done <<< "$new_sessions"
+
+if [ "$fails" -gt 0 ]; then
+  {
+    echo ""
+    echo "Pre-commit drift gate failed: $fails missing tracking marker(s)."
+    echo "Update the listed tracking file(s) with 'session N' refs and re-stage."
+    echo "Bypass with --no-verify ONLY if you have a real reason."
+  } >&2
+  exit 1
+fi
+exit 0
