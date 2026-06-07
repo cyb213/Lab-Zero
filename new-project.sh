@@ -20,13 +20,13 @@ set -euo pipefail
 
 LAB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATE="$LAB/template"
-# Vendored-identity source: prefer a top-level IDENTITY.md (generic lab), else
-# identity/NICK.md, else identity/IDENTITY.md. Vendored into each project as
-# identity/IDENTITY.md regardless of the source filename.
+# Vendored-identity source: prefer a top-level IDENTITY.md, else
+# identity/IDENTITY.md, else the first identity/*.md found. Vendored into each
+# project as identity/IDENTITY.md regardless of the source filename.
 if   [[ -f "$LAB/IDENTITY.md" ]];          then IDENTITY="$LAB/IDENTITY.md"
-elif [[ -f "$LAB/identity/NICK.md" ]];     then IDENTITY="$LAB/identity/NICK.md"
 elif [[ -f "$LAB/identity/IDENTITY.md" ]]; then IDENTITY="$LAB/identity/IDENTITY.md"
-else IDENTITY="$LAB/IDENTITY.md"; fi   # missing-file is reported by the check below
+else IDENTITY="$(ls "$LAB"/identity/*.md 2>/dev/null | head -n1 || true)"; fi
+[[ -n "$IDENTITY" ]] || IDENTITY="$LAB/IDENTITY.md"   # missing-file is reported by the check below
 # Seeded memories live in the lab's own CC memory namespace (derived from path).
 LAB_KEY="$(printf '%s' "$LAB" | tr '/._' '-')"
 LAB_NS="$HOME/.claude/projects/$LAB_KEY/memory"

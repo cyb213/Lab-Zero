@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tracking-drift gate (generalized from Ray_OS S171/S298).
+# Tracking-drift gate.
 #
 # When a commit ADDS a new Sessions/YYYY-MM-DD_NNN_*.md, every configured
 # tracking file must contain the literal "session N" (no zero-padding).
