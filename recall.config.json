@@ -6,6 +6,7 @@
     "Sessions/**/*.md",
     "Source/**/*.md",
     "IDENTITY.md",
+    "AGENTS.md",
     "CLAUDE.md",
     "Projects-REGISTRY.md"
   ],

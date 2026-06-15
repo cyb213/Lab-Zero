@@ -17,5 +17,13 @@ __pycache__/
 *.whl
 .tmp*/
 
+# harness wiring generated locally by `bootstrap.sh --harness …` (never committed):
+#  - .codex/         : Codex recall hooks + config (derived from the canonical core)
+#  - AGENTS.override.md : Codex identity shadow (your resolved IDENTITY.md — personal)
+#  - .lab/           : active-harness state
+.codex/
+AGENTS.override.md
+.lab/
+
 # os
 .DS_Store

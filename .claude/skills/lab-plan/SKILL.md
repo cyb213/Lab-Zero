@@ -1,7 +1,6 @@
 ---
-name: plan
+name: lab-plan
 description: Run a structured planning session — interview the sources of truth, draft, adversarial review (3 reviewers), approve, update docs. Use when building a new feature or phase that touches more than ~2 files.
-disable-model-invocation: true
 ---
 
 # Planning Session Protocol

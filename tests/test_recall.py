@@ -119,8 +119,74 @@ def test_roundtrip():
         check("top hit is the Celsius line", "Celsius" in out or "CLAUDE.md" in out, out[-400:])
 
 
+# ── 5. Hook stdout is the JSON envelope BOTH harnesses accept ────────────────
+# Codex 0.130.0 rejects raw-text hook stdout (SessionStart: "invalid session
+# start JSON output"; Stop: "plain text is invalid") — and a banner starting with
+# '[' trips its JSON auto-parse. So the shared recall hooks must emit the
+# hookSpecificOutput.additionalContext envelope (Claude injects it too). (D-010.)
+def _run_hook(name, td, stdin=None):
+    return subprocess.run(
+        ["bash", str(SCRIPTS / "hooks" / name)],
+        cwd=str(td), input=stdin, capture_output=True, text=True,
+    )
+
+
+def _parse_json(label, out):
+    """json.loads(out) but report a clean FAIL (not a traceback) on raw text."""
+    try:
+        return json.loads(out)
+    except Exception as e:
+        check(f"{label}: stdout is valid JSON", False, f"{e}: {out[:120]!r}")
+        return None
+
+
+def test_hook_json_envelope():
+    print("[5] recall hooks emit the JSON envelope (Claude+Codex)")
+    with tempfile.TemporaryDirectory(prefix="recall-hook-") as td:
+        td = Path(td)
+        (td / "recall.config.json").write_text(json.dumps({"root": ".", "auto_memory": "none"}))
+
+        # SessionStart — always emits the banner; must be one JSON object.
+        r = _run_hook("recall-session-start.sh", td)
+        check("session-start exit 0", r.returncode == 0, r.stderr[-300:])
+        check("session-start stdout starts with '{' (not raw '[recall]')",
+              r.stdout.lstrip()[:1] == "{", r.stdout[:80])
+        obj = _parse_json("session-start", r.stdout)
+        if obj is not None:
+            hso = obj.get("hookSpecificOutput", {})
+            check("session-start hookEventName=SessionStart", hso.get("hookEventName") == "SessionStart", str(hso)[:120])
+            check("session-start additionalContext carries the banner",
+                  "recall" in (hso.get("additionalContext") or ""), str(hso)[:160])
+
+        # UserPromptSubmit — a new codename triggers a nudge; envelope-wrapped.
+        evt = json.dumps({"prompt": "continuing the session 9 cleanup", "hook_event_name": "UserPromptSubmit"})
+        r = _run_hook("recall-user-prompt.sh", td, stdin=evt)
+        check("user-prompt exit 0", r.returncode == 0, r.stderr[-300:])
+        obj = _parse_json("user-prompt", r.stdout)
+        if obj is not None:
+            hso = obj.get("hookSpecificOutput", {})
+            check("user-prompt hookEventName=UserPromptSubmit", hso.get("hookEventName") == "UserPromptSubmit", str(hso)[:120])
+            check("user-prompt additionalContext mentions the new codename",
+                  "session 9" in (hso.get("additionalContext") or ""), str(hso)[:160])
+
+        # UserPromptSubmit — nothing to surface ⇒ empty stdout (valid on both).
+        evt = json.dumps({"prompt": "just a plain question", "hook_event_name": "UserPromptSubmit"})
+        r = _run_hook("recall-user-prompt.sh", td, stdin=evt)
+        check("user-prompt empty-case exit 0", r.returncode == 0, r.stderr[-300:])
+        check("user-prompt empty-case emits nothing", r.stdout.strip() == "", r.stdout[:120])
+
+        # Stop — must be valid JSON at exit 0 (Codex rejects plain text), no block.
+        evt = json.dumps({"transcript_path": "/nonexistent/transcript.jsonl", "hook_event_name": "Stop"})
+        r = _run_hook("recall-stop.sh", td, stdin=evt)
+        check("stop exit 0", r.returncode == 0, r.stderr[-300:])
+        obj = _parse_json("stop", r.stdout)
+        if obj is not None:
+            check("stop output is a JSON object", isinstance(obj, dict), str(obj)[:120])
+            check("stop does not block the session", obj.get("decision") != "block", str(obj)[:120])
+
+
 def main():
-    for t in (test_transform, test_isolation_guard, test_db_under_root, test_roundtrip):
+    for t in (test_transform, test_isolation_guard, test_db_under_root, test_roundtrip, test_hook_json_envelope):
         t()
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     if FAIL:

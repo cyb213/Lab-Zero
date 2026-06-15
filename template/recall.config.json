@@ -5,9 +5,19 @@
     "Source/**/*.md",
     "Log/**/*.md",
     "Sessions/**/*.md",
+    "AGENTS.md",
     "CLAUDE.md"
   ],
-  "id_search_dirs": ["Source", "Log", "Sessions"],
+  "id_search_dirs": [
+    "Source",
+    "Log",
+    "Sessions"
+  ],
   "auto_memory": "runtime",
-  "tracking_files": ["Log/STATUS.md", "Log/TASKS.md", "Log/PLAN.md", "Log/DECISIONS.md"]
+  "tracking_files": [
+    "Log/STATUS.md",
+    "Log/TASKS.md",
+    "Log/PLAN.md",
+    "Log/DECISIONS.md"
+  ]
 }

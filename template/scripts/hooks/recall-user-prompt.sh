@@ -25,6 +25,16 @@ ROOT="$(find_root)"
 VENV_PY="$ROOT/.venv/bin/python"
 [[ -x "$VENV_PY" ]] || VENV_PY="python3"
 
+# Emit text as the hookSpecificOutput.additionalContext JSON envelope — the shape
+# BOTH Claude Code and Codex accept. Codex *rejects* raw-text hook stdout (a nudge
+# starting with '[' trips its JSON auto-parse); Claude injects additionalContext the
+# same as it does raw stdout. (D-010.)
+emit_context() {  # $1 = hookEventName ; $2 = additionalContext
+  HOOK_EVENT="$1" HOOK_CTX="$2" "$VENV_PY" -c 'import json,os
+print(json.dumps({"hookSpecificOutput":{"hookEventName":os.environ["HOOK_EVENT"],"additionalContext":os.environ["HOOK_CTX"]}}))' 2>/dev/null \
+    || printf '%s\n' "$2"
+}
+
 eval "$("$VENV_PY" "$HOOK_DIR/../recall_lib.py" --env 2>/dev/null)" || true
 TRAIL="${RECALL_TRAIL:-$ROOT/memory/recall-trail.jsonl}"
 REGEX="${RECALL_CODENAME_REGEX:-\\bsession[[:space:]]+[0-9]+\\b}"
@@ -62,10 +72,16 @@ if echo "$PROMPT" | grep -qiE "\b(we (already )?decided|earlier we|we agreed|we 
   DRIFT_HIT=1
 fi
 
+# Accumulate the nudge(s) into one payload so a single JSON envelope carries them.
+CTX=""
 if [[ -n "${NEW_IDS// /}" ]]; then
-  echo "[recall] New codenames in prompt:$NEW_IDS — consider \`bash scripts/recall.sh '<id>'\` (not yet surfaced this session)."
+  CTX="[recall] New codenames in prompt:$NEW_IDS — consider \`bash scripts/recall.sh '<id>'\` (not yet surfaced this session)."
 fi
 if [[ -n "$DRIFT_HIT" ]]; then
-  echo "[recall] Prompt contains drift verbs (decided/earlier/agreed/etc.) — consider semantic recall before answering."
+  [[ -n "$CTX" ]] && CTX="$CTX"$'\n'
+  CTX="$CTX[recall] Prompt contains drift verbs (decided/earlier/agreed/etc.) — consider semantic recall before answering."
 fi
+
+# Nothing to surface ⇒ stay silent (empty stdout is valid on both harnesses).
+[[ -n "$CTX" ]] && emit_context UserPromptSubmit "$CTX"
 exit 0

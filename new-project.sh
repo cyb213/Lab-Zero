@@ -34,12 +34,14 @@ REGISTRY="$LAB/Projects-REGISTRY.md"
 
 # ── args ──────────────────────────────────────────────────────────────────────
 SLUG=""; NAME=""; PURPOSE="TODO — fill in Source/INTENT.md"; ROOT="$HOME/Projects"
-FULL=0; DO_VENV=1; DO_SEED=1; DO_REINDEX=1; DO_GIT=1
+FULL=0; DO_VENV=1; DO_SEED=1; DO_REINDEX=1; DO_GIT=1; HARNESS_CSV="claude"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --name) NAME="$2"; shift 2;;
     --purpose) PURPOSE="$2"; shift 2;;
     --root) ROOT="$2"; shift 2;;
+    --harness) HARNESS_CSV="$2"; shift 2;;
+    --harness=*) HARNESS_CSV="${1#*=}"; shift;;
     --full) FULL=1; shift;;
     --no-venv) DO_VENV=0; shift;;
     --no-seed) DO_SEED=0; shift;;
@@ -52,6 +54,11 @@ done
 [[ -z "$SLUG" ]] && { echo "usage: new-project.sh <slug> [--name ..] [--purpose ..] [--root ..] [--full]" >&2; exit 2; }
 [[ "$SLUG" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "slug must be lowercase alnum/hyphen: $SLUG" >&2; exit 2; }
 [[ -z "$NAME" ]] && NAME="$SLUG"
+# Desired harness set (default claude). A `codex` member triggers the project's own
+# bootstrap (the generator) at stamp time; the bootstrap re-validates the full CSV.
+HSET="$(printf '%s' "$HARNESS_CSV" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+WANT_CODEX_STAMP=0
+case ",$HSET," in *,codex,*) WANT_CODEX_STAMP=1;; esac
 [[ -d "$TEMPLATE" ]] || { echo "missing template: $TEMPLATE" >&2; exit 1; }
 [[ -f "$IDENTITY" ]] || { echo "missing identity: $IDENTITY" >&2; exit 1; }
 
@@ -84,7 +91,7 @@ dest=Path(os.environ["DEST"]); repl={
 }
 for p in dest.rglob("*"):
     if not p.is_file(): continue
-    if any(seg in (".git",".venv") for seg in p.parts): continue
+    if any(seg in (".git",".venv",".codex",".lab") for seg in p.parts): continue  # never touch generated layers
     try: t=p.read_text(encoding="utf-8")
     except Exception: continue
     if "__" in t:
@@ -113,6 +120,16 @@ if [[ "$DO_SEED" -eq 1 ]]; then
   else
     echo "[new-project]   WARN: Lab namespace $LAB_NS not found; skipped memory seed" >&2
   fi
+fi
+
+# ── wire the Codex layer (clone-local, git-ignored) when requested ────────────
+# Dogfood the project's OWN bootstrap (one wiring path). Runs AFTER substitution and
+# BEFORE git init/add, so the generated .codex/ / .lab/ / AGENTS.override.md land under
+# the template .gitignore and never enter the initial commit. The recall engine is
+# already built above (or skipped via flags), so wire only.
+if [[ "$WANT_CODEX_STAMP" -eq 1 ]]; then
+  echo "[new-project]   wiring Codex layer via the project bootstrap (clone-local, git-ignored)"
+  LAB_BOOTSTRAP_SKIP_ENGINE=1 bash "$DEST/bootstrap.sh" --harness "$HARNESS_CSV"
 fi
 
 # ── git init + hooks + initial commit ────────────────────────────────────────
