@@ -10,6 +10,8 @@
 #   --name "Display Name"   Human name (default: slug)
 #   --purpose "one-liner"   One-line purpose (default: "TODO — fill in INTENT.md")
 #   --root DIR              Parent dir (default: ~/Projects)
+#   --harness claude[,codex]  Harness(es) to wire (default: claude). A `codex` member
+#                           also emits the git-ignored Codex layer at stamp time.
 #   --full                  Also scaffold the optional genome docs (USER-STORIES/INCEPTION/ARCH-OQ)
 #   --no-venv|--no-seed|--no-reindex|--no-git   Skip that step (testing/manual)
 #
@@ -51,7 +53,7 @@ while [[ $# -gt 0 ]]; do
     *) [[ -z "$SLUG" ]] && SLUG="$1" || { echo "unexpected arg: $1" >&2; exit 2; }; shift;;
   esac
 done
-[[ -z "$SLUG" ]] && { echo "usage: new-project.sh <slug> [--name ..] [--purpose ..] [--root ..] [--full]" >&2; exit 2; }
+[[ -z "$SLUG" ]] && { echo "usage: new-project.sh <slug> [--name ..] [--purpose ..] [--root ..] [--harness claude,codex] [--full]" >&2; exit 2; }
 [[ "$SLUG" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "slug must be lowercase alnum/hyphen: $SLUG" >&2; exit 2; }
 [[ -z "$NAME" ]] && NAME="$SLUG"
 # Desired harness set (default claude). A `codex` member triggers the project's own
