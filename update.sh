@@ -51,6 +51,7 @@ MACHINERY=(
   new-project.sh
   bootstrap.sh
   update.sh
+  contribute.sh           # the up-path helper (sibling of this down-path script)
   README.md
   LICENSE
   .env.example            # engine env template (your live .env stays personal)

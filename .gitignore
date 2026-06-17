@@ -26,5 +26,9 @@ dist/
 AGENTS.override.md
 .lab/
 
+# contribute.sh output — a leak-audited patch, but still your local artifact (not
+# meant to be committed into your Lab). Audited-clean by construction; this is tidiness.
+lab-zero-contribution.patch
+
 # os
 .DS_Store
