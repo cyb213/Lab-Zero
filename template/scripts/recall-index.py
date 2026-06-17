@@ -16,6 +16,7 @@ import bisect
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import struct
 import sys
@@ -37,10 +38,25 @@ BATCH_SIZE = 200
 MAX_CHUNK_CHARS = 600
 CHUNK_OVERLAP = 120
 
+# Schema marker (PRAGMA user_version): 1 = chunks.heading column present (A1/A7).
+SCHEMA_VERSION = 1
 
-# ── Chunking with real line numbers ──────────────────────────────────────────
+HEADING_RE = re.compile(r"^(#{1,6})\s+(\S.*?)\s*$")  # ATX heading w/ a non-empty title
+FENCE_RE = re.compile(r"^\s*(```|~~~)")              # fenced code-block delimiter
+
+
+# ── Heading-aware chunking with real line numbers (A1) + breadcrumbs (A7) ─────
 def chunk_text(text, max_chars=MAX_CHUNK_CHARS, overlap=CHUNK_OVERLAP):
-    """Yield (chunk_text, start_line, end_line) with real 1-based line numbers."""
+    """Yield (chunk_text, start_line, end_line, heading) with real 1-based line numbers.
+
+    The doc is split on markdown headings: each heading plus its body (up to the next
+    heading) is one section, stamped with its heading-path breadcrumb (A7), e.g.
+    "Phase 5 › Risks › R2". A section whose body exceeds max_chars falls back to the
+    original char window WITHIN that section (a strict refinement — never a giant chunk).
+    Preamble before the first heading is its own breadcrumb-less chunk; a heading-less doc
+    degenerates to the original whole-text windowing. '#' lines inside fenced code blocks
+    are not treated as headings.
+    """
     if not text:
         return
     lines = text.splitlines(keepends=True)
@@ -52,16 +68,66 @@ def chunk_text(text, max_chars=MAX_CHUNK_CHARS, overlap=CHUNK_OVERLAP):
         idx = bisect.bisect_right(line_starts, c) - 1
         return max(1, idx + 1)
 
-    n = len(text)
-    start = 0
-    while start < n:
-        end = min(start + max_chars, n)
-        chunk = text[start:end].strip()
-        if chunk:
-            yield chunk, char_to_line(start), char_to_line(end - 1)
-        if end >= n:
-            break
-        start = end - overlap
+    # Locate heading lines, skipping fenced code blocks: (line_idx, depth, title).
+    headings = []
+    in_fence = False
+    for i, line in enumerate(lines):
+        if FENCE_RE.match(line):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        m = HEADING_RE.match(line)
+        if m:
+            headings.append((i, len(m.group(1)), m.group(2).strip()))
+
+    # Segments: (start_line_idx, end_line_idx, breadcrumb_or_None). One per heading
+    # (body up to the next heading) + the preamble; heading-less ⇒ the whole doc.
+    segments = []
+    if not headings:
+        segments.append((0, len(lines), None))
+    else:
+        if headings[0][0] > 0:
+            segments.append((0, headings[0][0], None))  # preamble (no breadcrumb)
+        stack = []  # ancestors: (depth, title)
+        for j, (hidx, depth, title) in enumerate(headings):
+            while stack and stack[-1][0] >= depth:
+                stack.pop()
+            stack.append((depth, title))
+            crumb = " › ".join(t for _, t in stack)
+            end_idx = headings[j + 1][0] if j + 1 < len(headings) else len(lines)
+            segments.append((hidx, end_idx, crumb))
+
+    def emit(a, b, crumb):
+        """Tight (stripped) chunk over the raw char span [a, b), with absolute line numbers."""
+        raw = text[a:b]
+        stripped = raw.strip()
+        if not stripped:
+            return None
+        lead = len(raw) - len(raw.lstrip())
+        sa = a + lead
+        ea = sa + len(stripped)  # exclusive
+        return stripped, char_to_line(sa), char_to_line(ea - 1), crumb
+
+    for s_idx, e_idx, crumb in segments:
+        a = line_starts[s_idx]
+        b = line_starts[e_idx]  # exclusive char offset
+        if not text[a:b].strip():
+            continue
+        if (b - a) <= max_chars:
+            out = emit(a, b, crumb)
+            if out:
+                yield out
+        else:
+            start = a  # window fallback WITHIN the section (absolute offsets)
+            while start < b:
+                end = min(start + max_chars, b)
+                out = emit(start, end, crumb)
+                if out:
+                    yield out
+                if end >= b:
+                    break
+                start = end - overlap
 
 
 def chunk_id(path, start_line, body_hash):
@@ -95,6 +161,7 @@ CREATE TABLE IF NOT EXISTS chunks (
     hash TEXT NOT NULL,
     model TEXT NOT NULL,
     text TEXT NOT NULL,
+    heading TEXT,
     updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_chunks_path ON chunks(path);
@@ -118,9 +185,33 @@ def open_db():
     return conn
 
 
+def ensure_schema(conn, force):
+    """Migrate an older index in place (C2): add the A1/A7 'heading' column if absent and
+    mark the schema via PRAGMA user_version. A genuine migration (column was missing) forces
+    a full re-embed so the existing rows gain breadcrumbs. Returns the (possibly forced) flag.
+    Runs in the INDEXER (a writer) — the SEARCHER never alters the schema, it degrades loudly."""
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(chunks)")]
+    ver = conn.execute("PRAGMA user_version").fetchone()[0]
+    if "heading" not in cols:
+        conn.execute("ALTER TABLE chunks ADD COLUMN heading TEXT")
+        conn.commit()
+        print("[indexer] migrated schema: added 'heading' column → forcing full re-embed", flush=True)
+        force = True
+    if ver != SCHEMA_VERSION:
+        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        conn.commit()
+    return force
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 def main(force=False):
     t_start = time.time()
+
+    # Open + migrate the DB up front so user_version/ALTER can act and (on a genuine
+    # migration) force a full re-embed before the changed-files window is computed.
+    conn = open_db()
+    force = ensure_schema(conn, force)
+
     state = load_state()
     last_run_ts = 0 if force else state.get("last_run_ts", 0)
 
@@ -142,11 +233,12 @@ def main(force=False):
 
     print(f"[indexer] {len(changed)} files changed since last run", flush=True)
     if not changed:
+        conn.close()
         save_state({"last_run_ts": t_start})
         return 0
 
     # Collect chunks
-    all_chunks = []  # (cid, rel_path, text, sl, el, body_hash)
+    all_chunks = []  # (cid, rel_path, text, sl, el, body_hash, heading)
     for abs_path, _ in changed:
         try:
             text = Path(abs_path).read_text(errors="replace")
@@ -156,12 +248,13 @@ def main(force=False):
         if not text.strip():
             continue
         rel = recall_lib.file_to_relpath(CFG, abs_path)
-        for chunk, sl, el in chunk_text(text):
+        for chunk, sl, el, heading in chunk_text(text):
             body_hash = hashlib.sha256(chunk.encode()).hexdigest()[:16]
-            all_chunks.append((chunk_id(rel, sl, body_hash), rel, chunk, sl, el, body_hash))
+            all_chunks.append((chunk_id(rel, sl, body_hash), rel, chunk, sl, el, body_hash, heading))
 
     print(f"[indexer] {len(all_chunks)} chunks to embed", flush=True)
     if not all_chunks:
+        conn.close()
         save_state({"last_run_ts": t_start})
         return 0
 
@@ -169,8 +262,6 @@ def main(force=False):
     from fastembed import TextEmbedding
 
     embedder = TextEmbedding(f"sentence-transformers/{MODEL_NAME}")
-
-    conn = open_db()
 
     if force:
         conn.execute("DELETE FROM chunks WHERE source=?", (SOURCE,))
@@ -196,14 +287,18 @@ def main(force=False):
 
     for i in range(0, len(all_chunks), BATCH_SIZE):
         batch = all_chunks[i : i + BATCH_SIZE]
-        embeddings = list(embedder.embed([c[2] for c in batch]))
-        for (cid, rel, text, sl, el, bh), emb in zip(batch, embeddings):
+        # A7: embed the breadcrumb + the chunk so the vector carries section context;
+        # the raw chunk is still stored in `text` so the snippet stays clean.
+        embeddings = list(
+            embedder.embed([(c[6] + "\n\n" + c[2]) if c[6] else c[2] for c in batch])
+        )
+        for (cid, rel, text, sl, el, bh, heading), emb in zip(batch, embeddings):
             blob = struct.pack(f"{len(emb)}f", *emb)
             try:
                 conn.execute(
-                    "INSERT OR REPLACE INTO chunks(id, path, source, start_line, end_line, hash, model, text, updated_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (cid, rel, SOURCE, sl, el, bh, MODEL_NAME, text, now_ms),
+                    "INSERT OR REPLACE INTO chunks(id, path, source, start_line, end_line, hash, model, text, heading, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (cid, rel, SOURCE, sl, el, bh, MODEL_NAME, text, heading, now_ms),
                 )
                 conn.execute("DELETE FROM chunks_vec WHERE id=?", (cid,))
                 conn.execute("INSERT INTO chunks_vec(id, embedding) VALUES (?, ?)", (cid, blob))

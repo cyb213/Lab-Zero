@@ -4,6 +4,12 @@ All notable changes to Lab Zero. Newest first. Versions follow [semantic version
 
 This file is what `update.sh --check` reads to show you what's new in a release — so each entry is a short, user-facing summary of what changed, not an internal commit log.
 
+## v1.3.0 — 2026-06-17
+
+- **Sharper recall.** Recall now splits your documents along their heading structure instead of blind fixed-size windows, so a search lands on the right section more often — especially for answers that live in short, deeply-nested sections.
+- **Heading breadcrumbs in results.** Each result now shows the full heading path it came from (e.g. `Architecture › Storage › Indexing`), so you can see a match's context at a glance instead of guessing where it sits.
+- **One-time index upgrade.** The first reindex after this update rebuilds the recall index with the new structure — a full re-embed, so it's slower than usual just that once. `update.sh` runs it for you.
+
 ## v1.2.0 — 2026-06-17
 
 - **Update notifications.** Every so often (about every 12 sessions, tunable) the session-start nudge reminds you to check whether a newer Lab Zero is out. It does no network call itself, so it's instant and works offline — it just reminds you to run the check.
