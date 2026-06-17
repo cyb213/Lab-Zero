@@ -200,15 +200,27 @@ your-lab/
 
 ## Staying up to date
 
-When the upstream `Lab-Zero` improves (better engine, new skills), pull just the machinery — your identity, memories, and projects are left untouched:
+Lab Zero ships tagged releases. Your clone knows what version it's on (a `VERSION` file) and, every so often (about every 12 sessions), the agent is **reminded to check** for a newer one. That reminder is a local nudge — it does no network call, so it's instant and works offline; it just prompts the agent to run the check when you next have a moment.
+
+**See what's new (read-only, needs network):**
 
 ```bash
-bash update.sh
+bash update.sh --check     # your version vs the latest release + the changelog
+```
+
+`--check` changes nothing — it just reaches upstream, tells you the version you're on, the latest published version, and what's new (from [CHANGELOG.md](CHANGELOG.md)).
+
+**Update (when you want it):**
+
+```bash
+bash update.sh             # pull the latest published release's machinery
 git diff --staged          # review what changed
 git commit -m "update lab machinery"
 ```
 
-`update.sh` only refreshes the machinery paths from upstream. Your personal layer — including the constitution files you may have customized (`AGENTS.md`, `CLAUDE.md`) and `recall.config.json` — is never auto-overwritten; `update.sh` prints a one-liner to diff those against upstream by hand if you want engine-side wording changes.
+`update.sh` lands the **latest published release** (the newest version tag), not a mid-flight `main` — so you update to a version we actually announced. Want a specific one (or the bleeding edge)? `bash update.sh --ref v1.1.0` pins a tag; `--ref main` pulls the branch HEAD.
+
+It only refreshes the machinery paths. Your personal layer — including the constitution files you may have customized (`AGENTS.md`, `CLAUDE.md`) and `recall.config.json` — is never auto-overwritten; `update.sh` prints a one-liner to diff those against upstream by hand if you want engine-side wording changes.
 
 ## Troubleshooting
 

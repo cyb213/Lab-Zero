@@ -124,10 +124,10 @@ def test_roundtrip():
 # start JSON output"; Stop: "plain text is invalid") — and a banner starting with
 # '[' trips its JSON auto-parse. So the shared recall hooks must emit the
 # hookSpecificOutput.additionalContext envelope (Claude injects it too). (D-010.)
-def _run_hook(name, td, stdin=None):
+def _run_hook(name, td, stdin=None, env=None):
     return subprocess.run(
         ["bash", str(SCRIPTS / "hooks" / name)],
-        cwd=str(td), input=stdin, capture_output=True, text=True,
+        cwd=str(td), input=stdin, capture_output=True, text=True, env=env,
     )
 
 
@@ -185,8 +185,93 @@ def test_hook_json_envelope():
             check("stop does not block the session", obj.get("decision") != "block", str(obj)[:120])
 
 
+# ── 6. update-check cadence nudge (Phase 7) ──────────────────────────────────
+# The SessionStart hook drops a "you're due for an update check" line every ~N
+# sessions, but ONLY in a deployed Lab Zero consumer (gated on $ROOT/update.sh). It
+# must: fire in the SAME single JSON envelope as the banner (Codex: one object only);
+# stay silent without update.sh (graduated projects + the factory); not nag a fresh
+# clone (zero-marker cold-start); and NEVER abort under a hostile $LAB_UPDATE_CHECK_EVERY
+# (set -u: an unbound-var abort would kill the recall banner — the D-010 failure). (D-031.)
+def _ctx(out):
+    try:
+        return json.loads(out)["hookSpecificOutput"]["additionalContext"] or ""
+    except Exception:
+        return ""
+
+
+def _seed_starts(td, n):
+    trail = td / "memory" / "recall-trail.jsonl"
+    trail.parent.mkdir(parents=True, exist_ok=True)
+    trail.write_text('{"ts":"X","event":"session_start"}\n' * n)
+    return trail
+
+
+def test_update_check_nudge():
+    print("[6] update-check cadence nudge (self-gated, set-u-safe, stdout-silent)")
+    base = dict(os.environ)
+    cfg = json.dumps({"root": ".", "auto_memory": "none"})
+
+    # (a) fires: update.sh present + ≥N starts ⇒ nudge in the SAME one JSON object as
+    #     the banner; a marker is appended.
+    with tempfile.TemporaryDirectory(prefix="nudge-fire-") as td:
+        td = Path(td)
+        (td / "recall.config.json").write_text(cfg)
+        (td / "update.sh").write_text("# stub\n")
+        trail = _seed_starts(td, 2)                    # +1 appended by the hook ⇒ 3 ≥ N=3
+        r = _run_hook("recall-session-start.sh", td, env={**base, "LAB_UPDATE_CHECK_EVERY": "3"})
+        check("nudge fires: exit 0", r.returncode == 0, r.stderr[-200:])
+        _parse_json("nudge-fire", r.stdout)            # must be exactly one JSON object
+        ctx = _ctx(r.stdout)
+        check("nudge fires: has [update] + 'update.sh --check'",
+              "[update]" in ctx and "update.sh --check" in ctx, ctx[:180])
+        check("nudge fires: still carries the recall banner (one envelope)", "recall" in ctx, ctx[:120])
+        check("nudge fires: marker appended to trail",
+              '"event":"update_check_nudged"' in trail.read_text(), trail.read_text()[-180:])
+
+    # (b) silent without update.sh — even with many starts + N=1 (template/factory shape).
+    with tempfile.TemporaryDirectory(prefix="nudge-noupd-") as td:
+        td = Path(td)
+        (td / "recall.config.json").write_text(cfg)
+        trail = _seed_starts(td, 20)
+        r = _run_hook("recall-session-start.sh", td, env={**base, "LAB_UPDATE_CHECK_EVERY": "1"})
+        ctx = _ctx(r.stdout)
+        check("nudge silent: NO [update] without update.sh", "[update]" not in ctx, ctx[:180])
+        check("nudge silent: no marker written without update.sh",
+              '"event":"update_check_nudged"' not in trail.read_text(), "")
+
+    # (c) zero-marker cold-start ⇒ no nudge until N accrue (a fresh clone won't nag).
+    with tempfile.TemporaryDirectory(prefix="nudge-cold-") as td:
+        td = Path(td)
+        (td / "recall.config.json").write_text(cfg)
+        (td / "update.sh").write_text("# stub\n")
+        r = _run_hook("recall-session-start.sh", td,
+                      env={k: v for k, v in base.items() if k != "LAB_UPDATE_CHECK_EVERY"})
+        ctx = _ctx(r.stdout)
+        check("nudge cold-start: 1<N ⇒ no nudge", "[update]" not in ctx, ctx[:180])
+        check("nudge cold-start: banner still present", "recall" in ctx, ctx[:120])
+
+    # (d) set -u SAFETY: the recall banner survives an UNSET and a GARBAGE
+    #     LAB_UPDATE_CHECK_EVERY (an unbound-var abort would kill the banner + the JSON).
+    for label, val in (("unset", None), ("garbage", "not-a-number")):
+        with tempfile.TemporaryDirectory(prefix=f"nudge-{label}-") as td:
+            td = Path(td)
+            (td / "recall.config.json").write_text(cfg)
+            (td / "update.sh").write_text("# stub\n")
+            _seed_starts(td, 30)
+            if val is None:
+                env = {k: v for k, v in base.items() if k != "LAB_UPDATE_CHECK_EVERY"}
+            else:
+                env = {**base, "LAB_UPDATE_CHECK_EVERY": val}
+            r = _run_hook("recall-session-start.sh", td, env=env)
+            check(f"nudge hostile-env ({label}): exit 0", r.returncode == 0, r.stderr[-200:])
+            _parse_json(f"nudge-{label}", r.stdout)    # still exactly one JSON object
+            ctx = _ctx(r.stdout)
+            check(f"nudge hostile-env ({label}): recall banner survives", "recall" in ctx, ctx[:120])
+
+
 def main():
-    for t in (test_transform, test_isolation_guard, test_db_under_root, test_roundtrip, test_hook_json_envelope):
+    for t in (test_transform, test_isolation_guard, test_db_under_root, test_roundtrip,
+              test_hook_json_envelope, test_update_check_nudge):
         t()
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     if FAIL:

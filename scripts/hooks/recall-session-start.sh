@@ -48,5 +48,29 @@ REGISTRY="$ROOT/Projects-REGISTRY.md"
 [[ -f "$REGISTRY" ]] && CTX="$CTX
 [lab] project registry: Projects-REGISTRY.md"
 
+# ── update-check cadence nudge — ONLY in a deployed Lab Zero consumer ──────────
+# update.sh exists only in a deployed clone (graduated projects + the factory ship
+# none), so `[[ -f "$ROOT/update.sh" ]]` self-gates this block — the one shared hook
+# stays byte-identical everywhere yet activates only where it belongs. OFFLINE-SAFE:
+# no network here, just a local count of session starts since the last nudge; the
+# agent's `bash update.sh --check` is the (networked) arbiter. set -u SAFE: every var
+# is defaulted (an unbound-var abort here would fire BEFORE emit_context, killing the
+# recall banner + emitting malformed JSON — the D-010 failure Codex rejects). stdout
+# SILENT: the nudge goes only into $CTX, carried by the single emit_context envelope
+# below (SessionStart stdout must stay exactly one JSON object).
+if [[ -f "$ROOT/update.sh" ]]; then
+  N="${LAB_UPDATE_CHECK_EVERY:-12}"
+  [[ "$N" =~ ^[1-9][0-9]*$ ]] || N=12              # empty/garbage ⇒ default (set -u safe)
+  last_nudge="$(grep -n '"event":"update_check_nudged"' "$TRAIL" 2>/dev/null | tail -1 | cut -d: -f1)"
+  last_nudge="${last_nudge:-0}"                     # no marker yet ⇒ count from the start
+  since="$(tail -n +"$((last_nudge+1))" "$TRAIL" 2>/dev/null | grep -c '"event":"session_start"')"
+  since="${since:-0}"
+  if [[ "$since" -ge "$N" ]]; then
+    CTX="$CTX
+[update] ~$since sessions since your last Lab Zero update check — run \`bash update.sh --check\` to see if a newer version is out."
+    printf '{"ts":"%s","event":"update_check_nudged"}\n' "$TS" >> "$TRAIL"
+  fi
+fi
+
 emit_context SessionStart "$CTX"
 exit 0
