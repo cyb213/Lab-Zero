@@ -3,9 +3,10 @@
 Generalized semantic memory indexer.
 
 Stack: sqlite + sqlite-vec (pip package, no vendored binary) + fastembed
-(all-MiniLM-L6-v2, 384d). Reads `recall.config.json` via recall_lib so paths,
-globs, model, dims, and the source tag are config-driven and consistent with
-the searcher.
+(all-MiniLM-L6-v2, 384d) + an FTS5 lexical index (chunks_fts), fused with the
+vector KNN via Reciprocal Rank Fusion in the searcher (A2 hybrid retrieval).
+Reads `recall.config.json` via recall_lib so paths, globs, model, dims, and the
+source tag are config-driven and consistent with the searcher.
 
 Usage:
     .venv/bin/python scripts/recall-index.py            # incremental
@@ -38,8 +39,9 @@ BATCH_SIZE = 200
 MAX_CHUNK_CHARS = 600
 CHUNK_OVERLAP = 120
 
-# Schema marker (PRAGMA user_version): 1 = chunks.heading column present (A1/A7).
-SCHEMA_VERSION = 1
+# Schema marker (PRAGMA user_version): 1 = chunks.heading column (A1/A7);
+# 2 = chunks_fts FTS5 lexical index for hybrid retrieval (A2).
+SCHEMA_VERSION = 2
 
 HEADING_RE = re.compile(r"^(#{1,6})\s+(\S.*?)\s*$")  # ATX heading w/ a non-empty title
 FENCE_RE = re.compile(r"^\s*(```|~~~)")              # fenced code-block delimiter
@@ -134,6 +136,14 @@ def chunk_id(path, start_line, body_hash):
     return hashlib.sha256(f"{SOURCE}:{path}:{start_line}:{body_hash}".encode()).hexdigest()
 
 
+def fts_body(heading, text):
+    """Shared FTS5 body builder (A2). The migration backfill AND the live insert loop both
+    call this, so a migrated index and a force-reindexed index hold byte-identical FTS
+    content (else search quality would silently depend on which path built the index). The
+    breadcrumb leads so a heading token is searchable alongside the body."""
+    return (heading or "") + "\n" + (text or "")
+
+
 # ── State ────────────────────────────────────────────────────────────────────
 def load_state():
     p = Path(STATE_FILE)
@@ -170,6 +180,11 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks_vec USING vec0(
     id TEXT PRIMARY KEY,
     embedding float[{DIMS}]
 );
+CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+    id UNINDEXED,
+    text,
+    tokenize="unicode61 tokenchars '-_.'"
+);
 """
 
 
@@ -186,10 +201,19 @@ def open_db():
 
 
 def ensure_schema(conn, force):
-    """Migrate an older index in place (C2): add the A1/A7 'heading' column if absent and
-    mark the schema via PRAGMA user_version. A genuine migration (column was missing) forces
-    a full re-embed so the existing rows gain breadcrumbs. Returns the (possibly forced) flag.
-    Runs in the INDEXER (a writer) — the SEARCHER never alters the schema, it degrades loudly."""
+    """Migrate an older index in place. Runs in the INDEXER (a writer) — the SEARCHER never
+    alters the schema, it degrades loudly. Both migrations are version-gated so they fire
+    exactly once on an upgrade, and run here (before the not-changed early-return in main())
+    so even a no-changed-files reindex upgrades a stale schema.
+
+      v0 → v1 (A1/A7): add the 'heading' column if absent; a genuine add forces a full
+        re-embed so existing rows gain breadcrumbs.
+      v1 → v2 (A2): backfill the chunks_fts lexical index from existing chunks — NO re-embed
+        (embeddings are untouched by A2), so the cheap backfill is correct. chunks_fts is
+        already created (empty) by SCHEMA in open_db(), so the backfill MUST gate on the
+        version, not table absence, or it would never fire on the common incremental upgrade.
+
+    Returns the (possibly forced) flag."""
     cols = [r[1] for r in conn.execute("PRAGMA table_info(chunks)")]
     ver = conn.execute("PRAGMA user_version").fetchone()[0]
     if "heading" not in cols:
@@ -197,7 +221,13 @@ def ensure_schema(conn, force):
         conn.commit()
         print("[indexer] migrated schema: added 'heading' column → forcing full re-embed", flush=True)
         force = True
-    if ver != SCHEMA_VERSION:
+    if ver < SCHEMA_VERSION:
+        n = 0
+        for cid, heading, text in conn.execute("SELECT id, heading, text FROM chunks").fetchall():
+            conn.execute("INSERT INTO chunks_fts(id, text) VALUES (?, ?)", (cid, fts_body(heading, text)))
+            n += 1
+        if n:
+            print(f"[indexer] migrated schema: backfilled chunks_fts ({n} rows) → A2 hybrid retrieval", flush=True)
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         conn.commit()
     return force
@@ -265,7 +295,8 @@ def main(force=False):
 
     if force:
         conn.execute("DELETE FROM chunks WHERE source=?", (SOURCE,))
-        conn.execute("DELETE FROM chunks_vec")  # vec table has no source column
+        conn.execute("DELETE FROM chunks_vec")  # vec + fts tables have no source column
+        conn.execute("DELETE FROM chunks_fts")
         conn.commit()
     else:
         # Drop chunks for the files we're re-indexing (handles edits cleanly).
@@ -276,8 +307,12 @@ def main(force=False):
                     "SELECT id FROM chunks WHERE path=? AND source=?", (rel, SOURCE)
                 ).fetchall()
             ]
+            # A2: delete the FTS rows by these OLD ids — an edited chunk gets a NEW chunk_id
+            # (sha over the body), so the per-insert delete (which only knows the new id)
+            # would orphan the old FTS row. Mirror the chunks_vec delete here.
             for cid in ids:
                 conn.execute("DELETE FROM chunks_vec WHERE id=?", (cid,))
+                conn.execute("DELETE FROM chunks_fts WHERE id=?", (cid,))
             conn.execute("DELETE FROM chunks WHERE path=? AND source=?", (rel, SOURCE))
         conn.commit()
 
@@ -302,6 +337,8 @@ def main(force=False):
                 )
                 conn.execute("DELETE FROM chunks_vec WHERE id=?", (cid,))
                 conn.execute("INSERT INTO chunks_vec(id, embedding) VALUES (?, ?)", (cid, blob))
+                conn.execute("DELETE FROM chunks_fts WHERE id=?", (cid,))
+                conn.execute("INSERT INTO chunks_fts(id, text) VALUES (?, ?)", (cid, fts_body(heading, text)))
                 inserted += 1
             except Exception as e:
                 print(f"  insert fail {rel}:{sl}: {e}", flush=True)
@@ -335,6 +372,7 @@ def main(force=False):
             ]
             for cid in ids:
                 conn.execute("DELETE FROM chunks_vec WHERE id=?", (cid,))
+                conn.execute("DELETE FROM chunks_fts WHERE id=?", (cid,))
             conn.execute("DELETE FROM chunks WHERE path=? AND source=?", (sp, SOURCE))
         conn.commit()
         print(f"[indexer] cleaned {len(stale)} stale path(s)", flush=True)

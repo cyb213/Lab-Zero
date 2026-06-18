@@ -4,6 +4,11 @@ All notable changes to Lab Zero. Newest first. Versions follow [semantic version
 
 This file is what `update.sh --check` reads to show you what's new in a release — so each entry is a short, user-facing summary of what changed, not an internal commit log.
 
+## v1.4.0 — 2026-06-18
+
+- **Hybrid recall: exact-token search alongside meaning.** Recall now runs a lexical full-text search next to the existing meaning-based search and fuses the two rankings, so queries for exact tokens — flag names, file paths, env-var names, version tags, library names, error codes — land on the right result even when meaning-based search alone drifts past them. Natural-language search is unchanged: meaning stays the primary signal, the lexical match is a precision booster on top.
+- **One-time index upgrade.** The first reindex after this update adds the new lexical index to your existing recall database. `update.sh` runs it for you.
+
 ## v1.3.0 — 2026-06-17
 
 - **Sharper recall.** Recall now splits your documents along their heading structure instead of blind fixed-size windows, so a search lands on the right section more often — especially for answers that live in short, deeply-nested sections.

@@ -38,6 +38,16 @@ def _load_indexer():
     spec.loader.exec_module(mod)
     return mod
 
+
+def _load_searcher():
+    """Import recall-search.py for in-process unit tests of its PURE helpers (the FTS query
+    sanitizer + the RRF fusion math). Binds CFG at import via recall_lib.load() but those
+    helpers never touch the DB."""
+    spec = importlib.util.spec_from_file_location("recall_search", str(SCRIPTS / "recall-search.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
 PASS, FAIL = [], []
 
 
@@ -377,6 +387,7 @@ def test_schema_migration():
                            cwd=str(td), env=env, capture_output=True, text=True)
         check("degrade: searcher exit 0 on old schema", s.returncode == 0, s.stderr[-300:])
         check("degrade: warns 'schema outdated' to stderr", "schema outdated" in s.stderr.lower(), s.stderr[-300:])
+        check("degrade: warns about missing FTS too (A2 ship-blocker)", "fts" in s.stderr.lower(), s.stderr[-300:])
         check("degrade: still serves the chunk (no crash)", "corpus/d.md" in s.stdout, s.stdout[-300:])
 
         # (B) indexer migrates: adds the column + bumps user_version.
@@ -386,9 +397,11 @@ def test_schema_migration():
         conn = sqlite3.connect(str(dbp))
         cols1 = [r[1] for r in conn.execute("PRAGMA table_info(chunks)")]
         ver1 = conn.execute("PRAGMA user_version").fetchone()[0]
+        fts_rows = conn.execute("SELECT count(*) FROM chunks_fts").fetchone()[0]  # raises if absent
         conn.close()
         check("migrate: 'heading' column added", "heading" in cols1, str(cols1))
-        check("migrate: user_version bumped (>=1)", ver1 >= 1, str(ver1))
+        check("migrate: user_version bumped to A2 (>=2)", ver1 >= 2, str(ver1))
+        check("migrate: chunks_fts created + populated (0->2)", fts_rows > 0, str(fts_rows))
 
         # (C) post-migration: no warning + the breadcrumb is now served.
         s2 = subprocess.run([PY, str(SCRIPTS / "recall-search.py"), "how do I roll back a release"],
@@ -398,10 +411,179 @@ def test_schema_migration():
         check("post-migrate: breadcrumb 'Doc' served", "Doc" in s2.stdout, s2.stdout[-300:])
 
 
+# ── 9. FTS5 schema + tokenizer keeps -_. tokens whole (A2) ───────────────────
+def test_fts_schema_and_tokenizer():
+    print("[9] FTS5 schema + tokenizer keeps -_. tokens (A2)")
+    import sqlite_vec
+    idx = _load_indexer()
+    check("SCHEMA_VERSION bumped to >=2", idx.SCHEMA_VERSION >= 2, str(idx.SCHEMA_VERSION))
+    check("SCHEMA declares chunks_fts (fts5)", "chunks_fts" in idx.SCHEMA and "fts5" in idx.SCHEMA, "")
+    check("SCHEMA keeps tokenchars '-_.'", "tokenchars '-_.'" in idx.SCHEMA, idx.SCHEMA)
+
+    # Functional: build the REAL schema and prove the tokenizer keeps target tokens whole.
+    conn = sqlite3.connect(":memory:")
+    conn.enable_load_extension(True); sqlite_vec.load(conn); conn.enable_load_extension(False)
+    conn.executescript(idx.SCHEMA)
+    conn.execute("INSERT INTO chunks_fts(id, text) VALUES (?, ?)",
+                 ("x", "D-007 --harness v1.3.0 SESSION_SECRET recall-index.py maxmemory-policy"))
+    for tok in ("D-007", "--harness", "v1.3.0", "SESSION_SECRET", "recall-index.py", "maxmemory-policy"):
+        n = conn.execute("SELECT count(*) FROM chunks_fts WHERE chunks_fts MATCH ?", ('"%s"' % tok,)).fetchone()[0]
+        check(f"tokenizer keeps {tok!r} as one token", n == 1, str(n))
+    conn.close()
+
+
+# ── 10. FTS query sanitizer (no-throw) + RRF fusion math (A2) ─────────────────
+def test_fts_sanitizer_and_rrf():
+    print("[10] FTS query sanitizer + RRF fusion math (A2)")
+    s = _load_searcher()
+    conn = sqlite3.connect(":memory:")
+    conn.execute("CREATE VIRTUAL TABLE t USING fts5(id UNINDEXED, text, tokenize=\"unicode61 tokenchars '-_.'\")")
+    conn.execute("INSERT INTO t(id, text) VALUES ('a', 'the --harness flag, a:b, and a quote')")
+
+    # Operator-laden / pathological queries: the sanitized MATCH string must never throw.
+    for q in ("--harness", '"x"', "a:b", ":::", "NEAR(x)", "a* OR b", "-_.", "  ", "(unbalanced"):
+        m = s.fts_match_query(q)
+        threw = False
+        if m:
+            try:
+                conn.execute("SELECT count(*) FROM t WHERE t MATCH ?", (m,)).fetchone()
+            except Exception as e:
+                threw = True
+                check(f"sanitizer no-throw on {q!r}", False, f"{e}: match={m!r}")
+        if not threw:
+            check(f"sanitizer no-throw on {q!r}", True)
+    conn.close()
+
+    check("zero-token / pure-punct query → empty match (caller skips FTS)",
+          s.fts_match_query(":::") == "" and s.fts_match_query("  ") == "" and s.fts_match_query("-_.") == "", "")
+    check("--harness preserved as a quoted token",
+          '"--harness"' in s.fts_match_query("how is --harness used"), s.fts_match_query("how is --harness used"))
+    capped = s.fts_match_query(" ".join("w%d" % i for i in range(100)))
+    check("token cap ~32 (expr-depth guard)", len(capped.split(" OR ")) <= 32, str(len(capped.split(" OR "))))
+
+    # RRF: id ranked in both lists beats ids in only one; rank-1-in-one-list = 1/(60+1).
+    fused = s.rrf_fuse(["a", "b", "c"], ["b", "a", "d"])
+    check("RRF: 'a'(1+2) & 'b'(2+1) tie above single-list 'c'",
+          abs(fused["a"] - fused["b"]) < 1e-9 and fused["a"] > fused["c"], str(fused))
+    check("RRF math: lone rank-1 == 1/(60+1)", abs(s.rrf_fuse(["z"], [])["z"] - 1.0 / 61) < 1e-12,
+          str(s.rrf_fuse(["z"], [])))
+    check("RRF: empty fts ⇒ preserves vector order (a>b>c)",
+          (lambda f: f["a"] > f["b"] > f["c"])(s.rrf_fuse(["a", "b", "c"], [])), "")
+    # Weighted RRF (W_FTS<1): a vector-rank-1 hit outranks an FTS-rank-1-only noise chunk,
+    # yet an exact-match lexical answer (FTS rank 1 + a weak vector rank) still beats a
+    # vector-only competitor — the property that fixed the invariant regression.
+    check("W_FTS is downweighted (<1.0, >0)", 0.0 < s.W_FTS < 1.0, str(s.W_FTS))
+    wf = s.rrf_fuse(["vhit"], ["noise"], w_fts=s.W_FTS)
+    check("weighted RRF: vector-1 beats FTS-1-only noise", wf["vhit"] > wf["noise"], str(wf))
+    wf2 = s.rrf_fuse(["vtop", "x", "x", "x", "x", "ans"], ["ans"], w_fts=s.W_FTS)
+    check("weighted RRF: exact lexical answer (fts1+vec6) beats vector-top-only", wf2["ans"] > wf2["vtop"], str(wf2))
+
+
+# ── 11. FTS maintenance: no-orphan-after-edit + source-filter drop (A2) ───────
+def test_fts_maintenance():
+    print("[11] FTS maintenance: no-orphan-after-edit + source-filter drop (A2)")
+    with tempfile.TemporaryDirectory(prefix="recall-fts-") as td:
+        td = Path(td)
+        (td / "recall.config.json").write_text(
+            json.dumps({"root": ".", "source": "test", "index_globs": ["corpus/**/*.md"], "auto_memory": "none"})
+        )
+        (td / "corpus").mkdir()
+        (td / "corpus" / "a.md").write_text("# Alpha\n\nThe alpha doc mentions maxmemory-policy here.\n")
+        (td / "corpus" / "b.md").write_text("# Beta\n\nThe beta doc is about something else entirely.\n")
+        env = {**os.environ, "RECALL_ROOT": str(td)}
+        dbp = td / "memory" / "index.db"
+
+        def run_index(*args):
+            return subprocess.run([PY, str(SCRIPTS / "recall-index.py"), *args],
+                                  cwd=str(td), env=env, capture_output=True, text=True)
+
+        def ids(table, where=""):
+            c = sqlite3.connect(str(dbp))
+            try:
+                return {r[0] for r in c.execute(f"SELECT id FROM {table} {where}")}
+            finally:
+                c.close()
+
+        ix = run_index("--force")
+        check("fts-maint: force index exit 0", ix.returncode == 0, (ix.stdout + ix.stderr)[-300:])
+        check("fts-maint: chunks_fts ids == chunks ids after force",
+              ids("chunks_fts") == ids("chunks", "WHERE source='test'"),
+              "fts ids != chunks ids after force")
+
+        # Edit a.md ⇒ body changes ⇒ new chunk_id; the OLD FTS row MUST be deleted (C-2).
+        (td / "corpus" / "a.md").write_text("# Alpha\n\nThe alpha doc now talks about allkeys-lru instead.\n")
+        ix2 = run_index()
+        check("fts-maint: incremental reindex exit 0", ix2.returncode == 0, (ix2.stdout + ix2.stderr)[-300:])
+        check("fts-maint: NO orphan FTS row after edit (ids still match chunks)",
+              ids("chunks_fts") == ids("chunks", "WHERE source='test'"), "orphan or missing FTS row")
+        c = sqlite3.connect(str(dbp))
+        fts_text = " ".join(r[0] for r in c.execute("SELECT text FROM chunks_fts"))
+        c.close()
+        check("fts-maint: edited content present in FTS", "allkeys-lru" in fts_text, fts_text[:160])
+        check("fts-maint: stale content purged from FTS", "maxmemory-policy" not in fts_text, fts_text[:160])
+
+        # Source filter (C-1): an FTS id whose chunks row is ANOTHER source must be dropped at
+        # hydration (chunks_fts is source-blind) — never surfaced, never a crash.
+        c = sqlite3.connect(str(dbp))
+        c.execute("INSERT INTO chunks(id, path, source, start_line, end_line, hash, model, text, heading, updated_at) "
+                  "VALUES ('OTHER1','x.md','other',1,1,'h','m','qqzztoken unique foreign body',NULL,0)")
+        c.execute("INSERT INTO chunks_fts(id, text) VALUES ('OTHER1','qqzztoken unique foreign body')")
+        c.commit(); c.close()
+        srch = subprocess.run([PY, str(SCRIPTS / "recall-search.py"), "qqzztoken"],
+                              cwd=str(td), env=env, capture_output=True, text=True)
+        check("fts-maint: searcher exit 0 with a foreign-source FTS hit", srch.returncode == 0, srch.stderr[-300:])
+        check("fts-maint: foreign-source id dropped (not surfaced / no crash)",
+              "OTHER1" not in srch.stdout and "x.md" not in srch.stdout, srch.stdout[-300:])
+
+
+# ── 12. Migration backfill on upgrade == force content, NO re-embed (A2 R9) ───
+def test_fts_backfill_no_reembed():
+    print("[12] FTS migration backfill (incremental upgrade) == force content, no re-embed (A2)")
+    with tempfile.TemporaryDirectory(prefix="recall-bf-") as td:
+        td = Path(td)
+        (td / "recall.config.json").write_text(
+            json.dumps({"root": ".", "source": "test", "index_globs": ["corpus/**/*.md"], "auto_memory": "none"})
+        )
+        (td / "corpus").mkdir()
+        (td / "corpus" / "c.md").write_text("# Conf\n\nSet maxmemory-policy to allkeys-lru for the worker.\n")
+        env = {**os.environ, "RECALL_ROOT": str(td)}
+        dbp = td / "memory" / "index.db"
+
+        ix = subprocess.run([PY, str(SCRIPTS / "recall-index.py"), "--force"],
+                            cwd=str(td), env=env, capture_output=True, text=True)
+        check("backfill: initial force exit 0", ix.returncode == 0, (ix.stdout + ix.stderr)[-300:])
+
+        # Snapshot the FORCE-built FTS, then simulate a pre-A2 (v1) index: drop chunks_fts +
+        # rewind user_version to 1. chunks/chunks_vec untouched (the no-re-embed surface).
+        # chunks_vec is a vec0 virtual table (needs the extension to read) — but we never drop
+        # it, so the no-re-embed proof is simply that the model never loads on this run.
+        conn = sqlite3.connect(str(dbp))
+        force_fts = {r[0]: r[1] for r in conn.execute("SELECT id, text FROM chunks_fts")}
+        conn.execute("DROP TABLE chunks_fts")
+        conn.execute("PRAGMA user_version = 1")
+        conn.commit(); conn.close()
+
+        # Incremental run, NO changed files: must version-gate-backfill chunks_fts (before the
+        # not-changed early-return) WITHOUT loading the model / re-embedding (R9).
+        ix2 = subprocess.run([PY, str(SCRIPTS / "recall-index.py")],
+                             cwd=str(td), env=env, capture_output=True, text=True)
+        check("backfill: incremental upgrade exit 0", ix2.returncode == 0, (ix2.stdout + ix2.stderr)[-300:])
+        check("backfill: did NOT re-embed (model never loaded)", "loading" not in ix2.stdout.lower(), ix2.stdout[-300:])
+
+        conn = sqlite3.connect(str(dbp))
+        ver = conn.execute("PRAGMA user_version").fetchone()[0]
+        bf_fts = {r[0]: r[1] for r in conn.execute("SELECT id, text FROM chunks_fts")}
+        conn.close()
+        check("backfill: user_version advanced to >=2", ver >= 2, str(ver))
+        check("backfill: content == force-built FTS (shared fts_body)", bf_fts == force_fts,
+              f"{list(bf_fts.items())[:1]} vs {list(force_fts.items())[:1]}")
+
+
 def main():
     for t in (test_transform, test_isolation_guard, test_db_under_root, test_roundtrip,
               test_hook_json_envelope, test_update_check_nudge, test_chunk_text,
-              test_schema_migration):
+              test_schema_migration, test_fts_schema_and_tokenizer, test_fts_sanitizer_and_rrf,
+              test_fts_maintenance, test_fts_backfill_no_reembed):
         t()
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     if FAIL:
