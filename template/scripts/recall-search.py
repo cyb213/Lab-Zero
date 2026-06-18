@@ -73,6 +73,15 @@ def has_fts_table(conn):
     ).fetchone() is not None
 
 
+def stored_models(conn):
+    """The DISTINCT embedding model(s) the index was built with, for THIS source (A3).
+    A healthy index has exactly one (a force-reindex re-stamps every row uniformly); a
+    multi-model set means the index was built across a config model_name change without a
+    `reindex --force` — its vectors are an incomparable mix and KNN is garbage."""
+    return {r[0] for r in conn.execute(
+        "SELECT DISTINCT model FROM chunks WHERE source=?", (SOURCE,))}
+
+
 def fts_match_query(query, cap=MAX_FTS_TOKENS):
     """Build a safe FTS5 MATCH string from a raw query (A2). FTS5 MATCH throws on syntax
     chars (- " * : ( ^ and NEAR/OR/AND operators), so: extract token runs, drop tokens with
@@ -113,6 +122,21 @@ def clean_snippet(text, max_len=SNIPPET_MAX):
 
 def search(query, top_k=DEFAULT_TOP_K):
     conn = open_db()
+
+    # A3 — model/index-mismatch guard. The query is about to be embedded with MODEL_NAME and
+    # KNN'd against the stored vectors; if those were built with a DIFFERENT model the two
+    # vector spaces are incomparable → silently wrong ordering, exit 0. There is NO valid
+    # degrade (unlike the heading/FTS fallbacks, which still return real results), so REFUSE
+    # loud + early — before paying the model load — exactly like the no-index guard above.
+    models = stored_models(conn)
+    if models and models != {MODEL_NAME}:
+        print(
+            f"[recall] index built with model {sorted(models)} but config wants "
+            f"'{MODEL_NAME}' — results would be wrong; run `recall.sh reindex --force`",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
     candidate_k = max(20, top_k * 4)  # both pools deep + symmetric so neither biases RRF
 
     # ── vector KNN (semantic) ──────────────────────────────────────────────────

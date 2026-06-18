@@ -242,6 +242,19 @@ def main(force=False):
     conn = open_db()
     force = ensure_schema(conn, force)
 
+    # A3 — model-change self-heal. If the configured model differs from the one the index was
+    # built with, auto-force a full re-embed so a mixed-model index never exists (the searcher
+    # would otherwise refuse it). Mirrors the heading-migration force=True idiom above; heals
+    # via the last_run_ts=0 reset (every file re-counts as changed), so even a no-changed-files
+    # reindex fixes it. Gated on `not force` — a migration that already forced needn't re-check.
+    if not force:
+        models = {r[0] for r in conn.execute(
+            "SELECT DISTINCT model FROM chunks WHERE source=?", (SOURCE,))}
+        if models and models != {MODEL_NAME}:
+            print(f"[indexer] model changed ({sorted(models)} → {MODEL_NAME}) "
+                  f"→ forcing full re-embed", flush=True)
+            force = True
+
     state = load_state()
     last_run_ts = 0 if force else state.get("last_run_ts", 0)
 

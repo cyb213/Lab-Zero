@@ -579,11 +579,104 @@ def test_fts_backfill_no_reembed():
               f"{list(bf_fts.items())[:1]} vs {list(force_fts.items())[:1]}")
 
 
+# ── 13. Model/index-mismatch guard (A3) ──────────────────────────────────────
+# Recall is silently correct ONLY if the embedding model that search() uses equals the
+# model the index was built with — else the query vector is KNN'd against an incomparable
+# vector space → quietly wrong ordering, exit 0. Every chunk stamps its `model`, but nothing
+# read it back. Guard (A3/D-036): the SEARCHER refuses LOUD (exit 2) on a stored-vs-config
+# mismatch — refuse, NOT degrade, because incomparable vector spaces have no valid fallback
+# (unlike the heading/FTS degrades) — and an incremental INDEXER run SELF-HEALS by detecting
+# the model change and auto-forcing a full re-embed (mirrors the heading-migration force).
+def test_model_guard():
+    print("[13] model/index-mismatch guard (A3)")
+    with tempfile.TemporaryDirectory(prefix="recall-model-") as td:
+        td = Path(td)
+        (td / "recall.config.json").write_text(
+            json.dumps({"root": ".", "source": "test", "index_globs": ["corpus/**/*.md"], "auto_memory": "none"})
+        )
+        (td / "corpus").mkdir()
+        (td / "corpus" / "d.md").write_text("# Doc\n\nThe rollback procedure points the symlink back.\n")
+        env = {**os.environ, "RECALL_ROOT": str(td)}
+        dbp = td / "memory" / "index.db"
+
+        def search(q):
+            return subprocess.run([PY, str(SCRIPTS / "recall-search.py"), q],
+                                  cwd=str(td), env=env, capture_output=True, text=True)
+
+        def stored_models():
+            c = sqlite3.connect(str(dbp))
+            try:
+                return {r[0] for r in c.execute("SELECT DISTINCT model FROM chunks WHERE source='test'")}
+            finally:
+                c.close()
+
+        # Build a correct, current-schema index with the REAL configured model.
+        ix = subprocess.run([PY, str(SCRIPTS / "recall-index.py"), "--force"],
+                            cwd=str(td), env=env, capture_output=True, text=True)
+        check("model-guard: initial force exit 0", ix.returncode == 0, (ix.stdout + ix.stderr)[-300:])
+
+        # (b) MATCHING model → search works (exit 0, serves the chunk, no mismatch warning).
+        s_ok = search("how do I roll back a release")
+        check("model-guard: matching model → search exit 0", s_ok.returncode == 0, s_ok.stderr[-300:])
+        check("model-guard: matching model → serves the chunk", "corpus/d.md" in s_ok.stdout, s_ok.stdout[-300:])
+        check("model-guard: matching model → no mismatch warning", "built with model" not in s_ok.stderr, s_ok.stderr[-200:])
+
+        # Corrupt only the stored `model` (simulating a config model_name change WITHOUT a
+        # reindex --force) — the exact silent-garbage state: stored model != configured model.
+        c = sqlite3.connect(str(dbp))
+        c.execute("UPDATE chunks SET model='fake-old-model' WHERE source='test'")
+        c.commit(); c.close()
+        check("model-guard: stored model now mismatches config", stored_models() == {"fake-old-model"}, str(stored_models()))
+
+        # (a) MISMATCH → searcher REFUSES loud: exit 2 + a stderr line naming model + the fix,
+        #     and NO results on stdout (refused, not degraded to garbage).
+        s_bad = search("how do I roll back a release")
+        check("model-guard: mismatch → searcher refuses (exit 2)", s_bad.returncode == 2,
+              f"rc={s_bad.returncode}: {s_bad.stderr[-200:]}")
+        check("model-guard: mismatch → stderr names model + reindex --force",
+              "model" in s_bad.stderr.lower() and "reindex --force" in s_bad.stderr, s_bad.stderr[-300:])
+        check("model-guard: mismatch → no results on stdout (refused, not degraded)",
+              "corpus/d.md" not in s_bad.stdout, s_bad.stdout[-200:])
+
+        # (d) SELF-HEAL: a plain incremental reindex (NO --force, NO changed files) must detect
+        #     the model change, auto-force a full re-embed with the REAL installed model, and
+        #     leave the DB carrying ONLY the configured model.
+        ix2 = subprocess.run([PY, str(SCRIPTS / "recall-index.py")],
+                             cwd=str(td), env=env, capture_output=True, text=True)
+        check("model-guard: self-heal incremental exit 0", ix2.returncode == 0, (ix2.stdout + ix2.stderr)[-400:])
+        check("model-guard: self-heal announced the model change → force re-embed",
+              "model changed" in ix2.stdout.lower(), ix2.stdout[-300:])
+        check("model-guard: self-heal → DB carries ONLY the configured model",
+              stored_models() == {"all-MiniLM-L6-v2"}, str(stored_models()))
+
+        # Post-heal the searcher works again (mismatch gone) — the heal produced a SEARCHABLE
+        # index, not just a relabelled model column.
+        s_heal = search("how do I roll back a release")
+        check("model-guard: post-heal search exit 0", s_heal.returncode == 0, s_heal.stderr[-300:])
+        check("model-guard: post-heal serves the chunk again", "corpus/d.md" in s_heal.stdout, s_heal.stdout[-300:])
+
+    # (c) EMPTY index → guard must NOT fire (no chunks ⇒ empty model set ⇒ skipped).
+    with tempfile.TemporaryDirectory(prefix="recall-empty-") as td2:
+        td2 = Path(td2)
+        (td2 / "recall.config.json").write_text(
+            json.dumps({"root": ".", "source": "test", "index_globs": ["corpus/**/*.md"], "auto_memory": "none"})
+        )
+        (td2 / "corpus").mkdir()  # empty corpus ⇒ zero chunks
+        env2 = {**os.environ, "RECALL_ROOT": str(td2)}
+        ixe = subprocess.run([PY, str(SCRIPTS / "recall-index.py"), "--force"],
+                             cwd=str(td2), env=env2, capture_output=True, text=True)
+        check("model-guard: empty-corpus index exit 0", ixe.returncode == 0, (ixe.stdout + ixe.stderr)[-300:])
+        se = subprocess.run([PY, str(SCRIPTS / "recall-search.py"), "anything"],
+                            cwd=str(td2), env=env2, capture_output=True, text=True)
+        check("model-guard: empty index → guard does NOT fire (exit 0)", se.returncode == 0,
+              f"rc={se.returncode}: {se.stderr[-200:]}")
+
+
 def main():
     for t in (test_transform, test_isolation_guard, test_db_under_root, test_roundtrip,
               test_hook_json_envelope, test_update_check_nudge, test_chunk_text,
               test_schema_migration, test_fts_schema_and_tokenizer, test_fts_sanitizer_and_rrf,
-              test_fts_maintenance, test_fts_backfill_no_reembed):
+              test_fts_maintenance, test_fts_backfill_no_reembed, test_model_guard):
         t()
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     if FAIL:

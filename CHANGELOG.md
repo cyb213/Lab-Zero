@@ -4,6 +4,10 @@ All notable changes to Lab Zero. Newest first. Versions follow [semantic version
 
 This file is what `update.sh --check` reads to show you what's new in a release — so each entry is a short, user-facing summary of what changed, not an internal commit log.
 
+## v1.5.0 — 2026-06-18
+
+- **Recall won't silently return bad results after a model change.** If you change the embedding model in your recall config without rebuilding the index, your stored vectors and your new query end up measured with different models — which aren't comparable, and used to produce quiet, low-quality results. Recall now detects the mismatch, refuses with a clear message instead of guessing, and points you at `reindex`. A plain reindex also notices the change on its own and rebuilds the index automatically, so the fix is one command. If you never change the model, nothing changes for you.
+
 ## v1.4.0 — 2026-06-18
 
 - **Hybrid recall: exact-token search alongside meaning.** Recall now runs a lexical full-text search next to the existing meaning-based search and fuses the two rankings, so queries for exact tokens — flag names, file paths, env-var names, version tags, library names, error codes — land on the right result even when meaning-based search alone drifts past them. Natural-language search is unchanged: meaning stays the primary signal, the lexical match is a precision booster on top.
