@@ -6,6 +6,8 @@
 memory/*.db
 memory/*.jsonl
 memory/*-state.json
+# promoted correction-learnings (personal; written by /review-corrections — never commit)
+memory/LEARNED.md
 
 # python / venv
 __pycache__/

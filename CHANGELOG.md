@@ -4,6 +4,13 @@ All notable changes to Lab Zero. Newest first. Versions follow [semantic version
 
 This file is what `update.sh --check` reads to show you what's new in a release — so each entry is a short, user-facing summary of what changed, not an internal commit log.
 
+## v1.6.0 — 2026-06-18
+
+- **The agent learns from your corrections.** When you correct the agent — telling it it got something wrong, or stating a standing preference — those moments are now captured as candidates instead of slipping away. A new `/review-corrections` skill walks you through the pending ones so you can promote the worthwhile lessons into the agent's long-term memory, drop the noise, and flag the rest. It closes the loop, so a correction you make once actually sticks.
+- **`recall.sh misses`.** Lists the correction candidates waiting for review (add `--json` for the raw entries), so you can see what's pending before you sit down to triage.
+- **A gentle review nudge.** Every so often (about every 8 sessions, tunable) the session-start message reminds you to run `/review-corrections` — but only when there are actually candidates waiting. No network call, instant, works offline.
+- **Self-trimming recall logs.** The recall activity logs now keep just their most recent entries (a generous tail, tunable) instead of growing without bound, so a long-lived workspace stays tidy on its own.
+
 ## v1.5.0 — 2026-06-18
 
 - **Recall won't silently return bad results after a model change.** If you change the embedding model in your recall config without rebuilding the index, your stored vectors and your new query end up measured with different models — which aren't comparable, and used to produce quiet, low-quality results. Recall now detects the mismatch, refuses with a clear message instead of guessing, and points you at `reindex`. A plain reindex also notices the change on its own and rebuilds the index automatically, so the fix is one command. If you never change the model, nothing changes for you.

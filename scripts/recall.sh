@@ -11,6 +11,9 @@
 #   recall.sh reindex [--force]
 #   recall.sh stats
 #   recall.sh expand <hash>
+#   recall.sh misses [--json]            # B1: pending correction candidates (loop reader)
+#   recall.sh misses --mark <ts>         #     advance the review high-water-mark
+#   recall.sh misses --ensure-glob       #     index memory/LEARNED.md (portable promote)
 #
 # Search invocations:
 #   1. ID short-circuit: grep codenames in the query across id_search_dirs.
@@ -46,7 +49,7 @@ mkdir -p "$(dirname "$TRAIL")"
 
 cmd="${1:-search}"
 case "$cmd" in
-  search|reindex|stats|expand) shift ;;
+  search|reindex|stats|expand|misses) shift ;;
   *) cmd="search" ;;
 esac
 
@@ -81,6 +84,17 @@ SQL
 SELECT path || ':' || start_line || '-' || end_line || char(10) || char(10) || text
 FROM chunks WHERE source='$RECALL_SOURCE' AND hash='$HASH' LIMIT 1;
 SQL
+    ;;
+
+  misses)
+    # B1 correction→memory loop. Thin public router — all logic lives in recall_lib so it
+    # stays unit-testable; jq is not assumed present, the venv python parses JSONL.
+    case "${1:-}" in
+      --mark)        "$VENV_PY" "$SCRIPT_DIR/recall_lib.py" --mark-reviewed "${2:-}" ;;
+      --ensure-glob) "$VENV_PY" "$SCRIPT_DIR/recall_lib.py" --ensure-learned-glob ;;
+      --json)        "$VENV_PY" "$SCRIPT_DIR/recall_lib.py" --misses --json ;;
+      *)             "$VENV_PY" "$SCRIPT_DIR/recall_lib.py" --misses ;;
+    esac
     ;;
 
   search)

@@ -6,7 +6,8 @@
     "Log/**/*.md",
     "Sessions/**/*.md",
     "AGENTS.md",
-    "CLAUDE.md"
+    "CLAUDE.md",
+    "memory/LEARNED.md"
   ],
   "id_search_dirs": [
     "Source",

@@ -23,6 +23,7 @@ CLI:
     recall_lib.py --json      # print resolved config as JSON (debug)
 """
 
+import datetime
 import json
 import os
 import subprocess
@@ -207,6 +208,100 @@ def file_to_relpath(cfg, abs_path):
     return abs_path
 
 
+# ── B1: correction→memory loop (reader + review high-water-mark + glob self-heal) ──
+# recall_stop_handler.py appends correction candidates to recall-misses.jsonl; these
+# close the loop. The detector is deliberately noisy, so the AGENT (the /review-corrections
+# skill) is the filter — this layer just lists what's pending and records what was reviewed.
+def last_review_ts(trail_path):
+    """The most-recent corrections-review high-water-mark (`through_ts`), or '' if none.
+
+    /review-corrections appends {"event":"corrections_reviewed","through_ts":TS} to the
+    trail after each pass (the trail, so log rotation protects one file's markers and the
+    misses log stays pure miss-events)."""
+    last = ""
+    try:
+        with open(trail_path, "r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                if rec.get("event") == "corrections_reviewed":
+                    tts = rec.get("through_ts")
+                    if isinstance(tts, str) and tts:
+                        last = tts
+    except OSError:
+        pass
+    return last
+
+
+def pending_misses(cfg):
+    """Correction candidates not yet reviewed: miss entries whose `ts` is strictly AFTER
+    the last review high-water-mark. ISO-8601 'Z' timestamps compare lexicographically."""
+    through = last_review_ts(cfg["trail"])
+    out = []
+    try:
+        with open(cfg["misses"], "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                if rec.get("event") != "miss":
+                    continue
+                if not through or str(rec.get("ts", "")) > through:
+                    out.append(rec)
+    except OSError:
+        pass
+    return out
+
+
+def write_review_mark(cfg, through_ts):
+    """Append the review high-water-mark to the trail. Advance to the LAST candidate the
+    skill actually DECIDED on (not wall-clock 'now') so an interrupted pass leaves the rest
+    pending — no-recycle must not become no-review. Best-effort."""
+    ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    entry = {"ts": ts, "event": "corrections_reviewed", "through_ts": str(through_ts)}
+    try:
+        os.makedirs(os.path.dirname(cfg["trail"]), exist_ok=True)
+        with open(cfg["trail"], "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except OSError:
+        return False
+    return True
+
+
+def ensure_learned_glob(cfg, learned_glob="memory/LEARNED.md"):
+    """Idempotently add `learned_glob` to the workspace config's `index_globs` so a promoted
+    memory/LEARNED.md gets indexed by recall. Operates on the RAW config file (never the
+    resolved cfg, which carries absolute paths + derived keys). Returns True if it wrote a
+    change, False if already present / no writable config.
+
+    R4: recall.config.json is personal-not-machinery, so update.sh can't deliver this glob
+    to an existing consumer — /review-corrections self-heals before its first portable promote.
+    """
+    cfgfile = Path(cfg["root"]) / CONFIG_NAME
+    try:
+        raw = json.loads(cfgfile.read_text())
+    except Exception:
+        return False
+    globs = raw.get("index_globs")
+    if not isinstance(globs, list):
+        globs = list(DEFAULTS["index_globs"])
+    if learned_glob in globs:
+        return False
+    globs.append(learned_glob)
+    raw["index_globs"] = globs
+    try:
+        cfgfile.write_text(json.dumps(raw, indent=2) + "\n")
+    except OSError:
+        return False
+    return True
+
+
 def _print_env(cfg):
     """Emit shell `export` lines for recall.sh to `eval`."""
 
@@ -224,9 +319,34 @@ def _print_env(cfg):
 
 
 if __name__ == "__main__":
-    conf = load()
-    if "--json" in sys.argv:
-        printable = {k: v for k, v in conf.items()}
-        print(json.dumps(printable, indent=2))
+    args = sys.argv[1:]
+    if "--pending-count" in args:            # B1: the session-start nudge reads this
+        print(len(pending_misses(load())))
+    elif "--ensure-learned-glob" in args:    # B1: /review-corrections glob self-heal (R4)
+        print("changed" if ensure_learned_glob(load()) else "unchanged")
+    elif "--mark-reviewed" in args:          # B1: advance the review high-water-mark
+        i = args.index("--mark-reviewed")
+        ts = args[i + 1] if i + 1 < len(args) else ""
+        if not ts:
+            _fail("--mark-reviewed requires a through_ts argument", 2)
+        write_review_mark(load(), ts)
+        print(f"[recall] marked corrections reviewed through {ts}")
+    elif "--misses" in args:                 # B1: pending correction candidates (D1 reader)
+        conf = load()
+        pend = pending_misses(conf)
+        if "--json" in args:
+            print(json.dumps(pend, ensure_ascii=False, indent=2))
+        elif not pend:
+            print("[recall] no pending correction candidates.")
+        else:
+            print(f"[recall] {len(pend)} pending correction candidate(s) since last review "
+                  f"(run /review-corrections to triage):\n")
+            for n, rec in enumerate(pend, 1):
+                txt = " ".join((rec.get("last_user", "") or "").split())
+                if len(txt) > 200:
+                    txt = txt[:197] + "…"
+                print(f"{n}. [{rec.get('ts', '')}] {txt}")
+    elif "--json" in args:
+        print(json.dumps({k: v for k, v in load().items()}, indent=2))
     else:  # default + --env
-        _print_env(conf)
+        _print_env(load())

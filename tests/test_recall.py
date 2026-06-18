@@ -672,11 +672,276 @@ def test_model_guard():
               f"rc={se.returncode}: {se.stderr[-200:]}")
 
 
+# ── 13. memory/LEARNED.md is gitignored everywhere the memory block ships (B1 Task 0) ─
+# The /review-corrections portable-promote target is correction-derived PERSONAL text.
+# The existing `memory/*.db|*.jsonl|*-state.json` patterns do NOT cover `.md`, and the
+# release redaction audit only matches the owner's identity tokens (D-030 tripwire, not a
+# backstop for other consumers) — so the .gitignore is the SOLE control keeping LEARNED.md out.
+# Adaptive: check every shipped .gitignore that guards the recall memory block (works in
+# the factory [3 copies], in dist [root + template], and in a stamped project).
+def test_learned_md_gitignored():
+    print("[13] memory/LEARNED.md gitignored wherever the memory block ships (B1 Task 0)")
+    import glob as _glob
+    gis = []
+    for gi in _glob.glob(str(REPO / "**" / ".gitignore"), recursive=True):
+        if any(s in gi for s in ("/dist/", "/.venv", "/node_modules", "/.git/")):
+            continue
+        if "memory/*.db" in Path(gi).read_text():
+            gis.append(gi)
+    check("found gitignore(s) guarding the memory block", len(gis) >= 1, str(gis))
+    for gi in gis:
+        with tempfile.TemporaryDirectory(prefix="gi-") as td:
+            td = Path(td)
+            subprocess.run(["git", "init", "-q", str(td)], check=True, capture_output=True)
+            (td / ".gitignore").write_text(Path(gi).read_text())
+            (td / "memory").mkdir()
+            (td / "memory" / "LEARNED.md").write_text("learning\n")
+            r = subprocess.run(["git", "-C", str(td), "check-ignore", "memory/LEARNED.md"],
+                               capture_output=True, text=True)
+            rel = os.path.relpath(gi, REPO)
+            check(f"{rel} ignores memory/LEARNED.md",
+                  r.returncode == 0 and "LEARNED.md" in r.stdout, f"rc={r.returncode} {r.stdout!r}")
+
+
+# ── 14. correction→memory loop: reader + high-water-mark (B1, D1/D2/D5) ──────
+# recall_stop_handler appends correction candidates to recall-misses.jsonl; B1 adds the
+# missing reader. pending = misses with ts AFTER the last `corrections_reviewed` trail
+# marker (high-water-mark). All logic lives in recall_lib (pending_misses / write_review_mark)
+# so it's unit-testable directly; recall.sh `misses` is the thin public router.
+def _write_misses(td, rows):
+    p = td / "memory" / "recall-misses.jsonl"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with open(p, "w", encoding="utf-8") as f:
+        for ts, txt in rows:
+            f.write(json.dumps({"ts": ts, "event": "miss", "last_user": txt,
+                                "transcript_path": "/x"}, ensure_ascii=False) + "\n")
+    return p
+
+
+def test_misses_reader():
+    print("[14] correction→memory reader + high-water-mark (B1 D1/D5)")
+    with tempfile.TemporaryDirectory(prefix="misses-") as td:
+        td = Path(td)
+        (td / "recall.config.json").write_text(json.dumps({"root": ".", "auto_memory": "none"}))
+        _write_misses(td, [
+            ("2026-01-01T00:00:00Z", "no that's wrong, use Celsius"),
+            ("2026-01-02T00:00:00Z", "from now on always X"),
+            ("2026-01-03T00:00:00Z", "stop"),
+        ])
+        cfg = recall_lib.load(str(td))
+
+        pend = recall_lib.pending_misses(cfg)
+        check("reader: all 3 pending with no high-water-mark", len(pend) == 3, str(len(pend)))
+        check("reader: preserves order + text", pend[0]["last_user"].startswith("no that"), str(pend[:1]))
+
+        recall_lib.write_review_mark(cfg, "2026-01-02T00:00:00Z")
+        pend2 = recall_lib.pending_misses(cfg)
+        check("reader: only ts>through_ts pending after mark", len(pend2) == 1, str(len(pend2)))
+        check("reader: remaining pending is the newest", pend2[0]["ts"] == "2026-01-03T00:00:00Z", str(pend2))
+
+        # interrupted-pass safety: marking through the LAST decided ts clears it; a partial
+        # pass (mark to an earlier ts) leaves the rest pending (asserted above).
+        recall_lib.write_review_mark(cfg, "2026-01-03T00:00:00Z")
+        check("reader: pending empty after marking through newest", recall_lib.pending_misses(cfg) == [], "")
+
+        # recall.sh public router: --json / human / --mark round-trip on fresh state.
+        _write_misses(td, [("2026-02-01T00:00:00Z", "you missed the config file")])
+        (td / "memory" / "recall-trail.jsonl").write_text("")
+        r = subprocess.run(["bash", str(SCRIPTS / "recall.sh"), "misses", "--json"],
+                           cwd=str(td), capture_output=True, text=True)
+        check("recall.sh misses --json exit 0", r.returncode == 0, r.stderr[-200:])
+        arr = _parse_json("misses --json", r.stdout)
+        check("recall.sh misses --json lists the pending candidate",
+              isinstance(arr, list) and len(arr) == 1, str(arr)[:160])
+        r2 = subprocess.run(["bash", str(SCRIPTS / "recall.sh"), "misses"],
+                            cwd=str(td), capture_output=True, text=True)
+        check("recall.sh misses human-readable shows the text", "you missed" in r2.stdout, r2.stdout[:200])
+        r3 = subprocess.run(["bash", str(SCRIPTS / "recall.sh"), "misses", "--mark", "2026-02-01T00:00:00Z"],
+                            cwd=str(td), capture_output=True, text=True)
+        check("recall.sh misses --mark exit 0", r3.returncode == 0, r3.stderr[-200:])
+        r4 = subprocess.run(["bash", str(SCRIPTS / "recall.sh"), "misses", "--json"],
+                            cwd=str(td), capture_output=True, text=True)
+        arr4 = _parse_json("misses --json post-mark", r4.stdout)
+        check("recall.sh misses: empty after mark", arr4 == [], str(arr4)[:120])
+
+
+# ── 15. portable promote self-heals index_globs (B1, R4/D4/Task 6) ───────────
+# recall.config.json is personal-not-machinery → an index_globs change can't reach an
+# existing consumer via update.sh. So before its first portable promote, /review-corrections
+# self-heals: idempotently append "memory/LEARNED.md" to the local config's index_globs.
+def test_ensure_learned_glob():
+    print("[15] portable promote self-heals index_globs (B1 R4/Task 6)")
+    with tempfile.TemporaryDirectory(prefix="glob-") as td:
+        td = Path(td)
+        cfgfile = td / "recall.config.json"
+        cfgfile.write_text(json.dumps({"root": ".", "auto_memory": "none",
+                                       "index_globs": ["Log/**/*.md"]}, indent=2))
+        added = recall_lib.ensure_learned_glob(recall_lib.load(str(td)))
+        check("glob: added on first call", added is True, str(added))
+        raw = json.loads(cfgfile.read_text())
+        check("glob: memory/LEARNED.md now in index_globs",
+              "memory/LEARNED.md" in raw["index_globs"], str(raw["index_globs"]))
+        check("glob: existing globs preserved", "Log/**/*.md" in raw["index_globs"], str(raw["index_globs"]))
+        again = recall_lib.ensure_learned_glob(recall_lib.load(str(td)))
+        check("glob: idempotent (no second add)", again is False, str(again))
+        raw2 = json.loads(cfgfile.read_text())
+        check("glob: exactly one occurrence",
+              raw2["index_globs"].count("memory/LEARNED.md") == 1, str(raw2["index_globs"]))
+
+
+# ── 16. corrections-review cadence nudge (B1 D3) ─────────────────────────────
+# Sibling of the update-check nudge with two differences: NOT gated on update.sh (corrections
+# are captured wherever recall runs), and additionally gated on pending-count > 0. Same single
+# JSON envelope + set -u safety. Never auto-acts — points the agent at /review-corrections.
+def test_corrections_nudge():
+    print("[16] corrections-review cadence nudge (not update-gated, pending-gated, set-u-safe)")
+    base = dict(os.environ)
+    cfg = json.dumps({"root": ".", "auto_memory": "none"})
+
+    # (a) fires: pending>0 + ≥CN starts ⇒ [corrections] in the SAME one JSON object + a marker.
+    #     NO update.sh present — proves the nudge is NOT update-gated.
+    with tempfile.TemporaryDirectory(prefix="cnudge-fire-") as td:
+        td = Path(td)
+        (td / "recall.config.json").write_text(cfg)
+        _write_misses(td, [("2026-01-01T00:00:00Z", "from now on use Celsius")])
+        trail = _seed_starts(td, 2)                    # +1 appended ⇒ 3 ≥ CN=3
+        r = _run_hook("recall-session-start.sh", td, env={**base, "LAB_CORRECTION_REVIEW_EVERY": "3"})
+        check("c-nudge fires: exit 0", r.returncode == 0, r.stderr[-200:])
+        _parse_json("c-nudge-fire", r.stdout)          # exactly one JSON object
+        ctx = _ctx(r.stdout)
+        check("c-nudge fires: [corrections] + /review-corrections",
+              "[corrections]" in ctx and "/review-corrections" in ctx, ctx[:200])
+        check("c-nudge fires: reports the pending count (1)", "1 pending" in ctx, ctx[:200])
+        check("c-nudge fires: still carries the recall banner (one envelope)", "recall" in ctx, ctx[:120])
+        check("c-nudge fires: NOT update-gated (no update.sh, still fired)",
+              not (td / "update.sh").exists() and "[corrections]" in ctx, ctx[:120])
+        check("c-nudge fires: marker appended",
+              '"event":"corrections_review_nudged"' in trail.read_text(), trail.read_text()[-200:])
+
+    # (b) silent when nothing pending — even with many starts + CN=1.
+    with tempfile.TemporaryDirectory(prefix="cnudge-empty-") as td:
+        td = Path(td)
+        (td / "recall.config.json").write_text(cfg)
+        _seed_starts(td, 20)                           # no misses file ⇒ pending 0
+        r = _run_hook("recall-session-start.sh", td, env={**base, "LAB_CORRECTION_REVIEW_EVERY": "1"})
+        ctx = _ctx(r.stdout)
+        check("c-nudge silent: NO [corrections] when pending==0", "[corrections]" not in ctx, ctx[:200])
+        check("c-nudge silent: banner still present", "recall" in ctx, ctx[:120])
+
+    # (c) pending>0 but cold-start (1<CN) ⇒ no nudge yet (don't nag a fresh clone).
+    with tempfile.TemporaryDirectory(prefix="cnudge-cold-") as td:
+        td = Path(td)
+        (td / "recall.config.json").write_text(cfg)
+        _write_misses(td, [("2026-01-01T00:00:00Z", "stop")])
+        r = _run_hook("recall-session-start.sh", td,
+                      env={k: v for k, v in base.items() if k != "LAB_CORRECTION_REVIEW_EVERY"})
+        check("c-nudge cold-start: 1<CN ⇒ no nudge", "[corrections]" not in _ctx(r.stdout), r.stdout[:200])
+
+    # (d) set -u SAFETY: banner survives an UNSET/garbage LAB_CORRECTION_REVIEW_EVERY.
+    for label, val in (("unset", None), ("garbage", "not-a-number")):
+        with tempfile.TemporaryDirectory(prefix=f"cnudge-{label}-") as td:
+            td = Path(td)
+            (td / "recall.config.json").write_text(cfg)
+            _write_misses(td, [("2026-01-01T00:00:00Z", "from now on X")])
+            _seed_starts(td, 30)
+            env = ({k: v for k, v in base.items() if k != "LAB_CORRECTION_REVIEW_EVERY"}
+                   if val is None else {**base, "LAB_CORRECTION_REVIEW_EVERY": val})
+            r = _run_hook("recall-session-start.sh", td, env=env)
+            check(f"c-nudge hostile-env ({label}): exit 0", r.returncode == 0, r.stderr[-200:])
+            _parse_json(f"c-nudge-{label}", r.stdout)
+            check(f"c-nudge hostile-env ({label}): banner survives", "recall" in _ctx(r.stdout), r.stdout[:120])
+
+
+# ── 17. log rotation: keep-tail K + hysteresis, dual-counter-safe (B1 D6/R1) ─
+# Both logs grow forever; rotation caps them at session start BEFORE the new sentinel.
+# Keep-tail preserves the most-recent session_start AND BOTH nudge cadence markers (which
+# are line-position-based, so dropping one silently resets that nudge's count) AND the misses
+# high-water-mark — all live at the tail. Hysteresis (trigger only past keep+keep/4) avoids churn.
+def test_log_rotation():
+    print("[17] log rotation: keep-tail K + hysteresis, dual-counter-safe (B1 D6/R1)")
+    base = dict(os.environ)
+    with tempfile.TemporaryDirectory(prefix="rotate-") as td:
+        td = Path(td)
+        (td / "recall.config.json").write_text(json.dumps({"root": ".", "auto_memory": "none"}))
+        mem = td / "memory"; mem.mkdir()
+        trail = mem / "recall-trail.jsonl"
+        lines = ['{"ts":"X","event":"session_start"}'] * 50
+        lines += ['{"ts":"X","event":"update_check_nudged"}']
+        lines += ['{"ts":"X","event":"session_start"}'] * 3
+        lines += ['{"ts":"X","event":"corrections_review_nudged"}']
+        lines += ['{"ts":"X","event":"session_start"}'] * 2          # 57 lines total
+        trail.write_text("\n".join(lines) + "\n")
+        misses = mem / "recall-misses.jsonl"
+        misses.write_text("".join('{"ts":"t%03d","event":"miss","last_user":"x"}\n' % i for i in range(57)))
+
+        def since(path, ev):
+            ls = Path(path).read_text().splitlines()
+            idx = max([i for i, l in enumerate(ls) if f'"event":"{ev}"' in l] or [-1])
+            after = ls[idx + 1:] if idx >= 0 else ls
+            return sum(1 for l in after if '"event":"session_start"' in l)
+
+        pre_upd, pre_corr = since(trail, "update_check_nudged"), since(trail, "corrections_review_nudged")
+        # K=20 ⇒ margin=5 ⇒ rotate when >25. Neither nudge fires (no update.sh; CN huge), so the
+        # hook only rotates + appends one sentinel.
+        r = _run_hook("recall-session-start.sh", td,
+                      env={**base, "LAB_RECALL_LOG_KEEP": "20", "LAB_CORRECTION_REVIEW_EVERY": "9999"})
+        check("rotation: exit 0", r.returncode == 0, r.stderr[-200:])
+        tl = trail.read_text().splitlines()
+        check("rotation: trail trimmed toward K (was 57)", len(tl) <= 25, f"len={len(tl)}")
+        check("rotation: update_check_nudged marker survived", any("update_check_nudged" in l for l in tl), "")
+        check("rotation: corrections_review_nudged marker survived", any("corrections_review_nudged" in l for l in tl), "")
+        check("rotation: last line is the fresh session_start anchor",
+              '"event":"session_start"' in tl[-1], tl[-1][:80])
+        check("rotation: update counter intact (pre+1, not reset)",
+              since(trail, "update_check_nudged") == pre_upd + 1,
+              f"pre={pre_upd} post={since(trail, 'update_check_nudged')}")
+        check("rotation: corrections counter intact (pre+1, not reset)",
+              since(trail, "corrections_review_nudged") == pre_corr + 1,
+              f"pre={pre_corr} post={since(trail, 'corrections_review_nudged')}")
+        ml = misses.read_text().splitlines()
+        check("rotation: misses trimmed to K (20)", len(ml) == 20, f"len={len(ml)}")
+        check("rotation: newest miss preserved (high-water integrity)", "t056" in ml[-1], ml[-1][:80])
+
+        # hysteresis: a SECOND run on the now-small trail must NOT re-trim (no per-session churn).
+        n_before = len(trail.read_text().splitlines())
+        _run_hook("recall-session-start.sh", td,
+                  env={**base, "LAB_RECALL_LOG_KEEP": "20", "LAB_CORRECTION_REVIEW_EVERY": "9999"})
+        n_after = len(trail.read_text().splitlines())
+        check("rotation hysteresis: small file grows by 1 (sentinel), not re-trimmed",
+              n_after == n_before + 1, f"before={n_before} after={n_after}")
+
+
+# ── 19. shipped recall.config.json carry the memory/LEARNED.md glob (B1 belt-and-suspenders) ─
+# The /review-corrections skill self-heals the glob before its first portable promote
+# (test 15), but the approved plan also pre-includes it in the SHIPPED configs so a fresh
+# clone/stamp indexes a promoted LEARNED.md out of the box (defence in depth). assets/ → dist
+# root config (source "lab"), src/template/ → stamped-project config (source "project"). The
+# factory's OWN ./recall.config.json (source "lab-zero") is EXEMPT — it uses the native
+# auto-memory promote path and is protect-hook-frozen, so self-heal alone covers it.
+# Existence-guarded → vacuous-pass in dist / a stamped project (no assets|src tree there).
+def test_shipped_configs_learned_glob():
+    print("[19] shipped recall.config.json carry the memory/LEARNED.md glob (B1 belt-and-suspenders)")
+    GLOB = "memory/LEARNED.md"
+    targets = [REPO / "assets" / "recall.config.json",
+               REPO / "src" / "template" / "recall.config.json"]
+    present = [t for t in targets if t.exists()]
+    if not present:
+        check("shipped-config glob check skipped (not the factory source tree)", True)
+        return
+    for t in present:
+        raw = json.loads(t.read_text())
+        rel = os.path.relpath(t, REPO)
+        check(f"{rel} index_globs includes {GLOB}",
+              GLOB in (raw.get("index_globs") or []), str(raw.get("index_globs")))
+
+
 def main():
     for t in (test_transform, test_isolation_guard, test_db_under_root, test_roundtrip,
               test_hook_json_envelope, test_update_check_nudge, test_chunk_text,
               test_schema_migration, test_fts_schema_and_tokenizer, test_fts_sanitizer_and_rrf,
-              test_fts_maintenance, test_fts_backfill_no_reembed, test_model_guard):
+              test_fts_maintenance, test_fts_backfill_no_reembed, test_model_guard,
+              test_learned_md_gitignored, test_misses_reader, test_ensure_learned_glob,
+              test_corrections_nudge, test_log_rotation, test_shipped_configs_learned_glob):
         t()
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     if FAIL:
