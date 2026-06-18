@@ -4,6 +4,10 @@ All notable changes to Lab Zero. Newest first. Versions follow [semantic version
 
 This file is what `update.sh --check` reads to show you what's new in a release — so each entry is a short, user-facing summary of what changed, not an internal commit log.
 
+## v1.7.0 — 2026-06-18
+
+- **Hardened leak protection.** A defense-in-depth redaction screen now runs in the pre-commit hook (in addition to the release-time audit), catching accidental personal-data, secret, or absolute-path leaks in staged `src/`/`assets/` changes before they're committed. Mostly relevant if you maintain machinery under those paths; otherwise nothing changes for you.
+
 ## v1.6.0 — 2026-06-18
 
 - **The agent learns from your corrections.** When you correct the agent — telling it it got something wrong, or stating a standing preference — those moments are now captured as candidates instead of slipping away. A new `/review-corrections` skill walks you through the pending ones so you can promote the worthwhile lessons into the agent's long-term memory, drop the noise, and flag the rest. It closes the loop, so a correction you make once actually sticks.

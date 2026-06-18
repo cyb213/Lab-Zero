@@ -1,6 +1,10 @@
 # secrets — never commit
 .env
 *.env
+# pre-commit redaction screen: your project-local owner-identifier list (your private
+# codenames, one per line). Personal data — full-coverage source for the OWNER class.
+# Never commit. Absent => the screen falls back to git-config-derived identifiers.
+.redaction-identifiers
 
 # recall index + memory artifacts (rebuilt locally)
 memory/*.db
