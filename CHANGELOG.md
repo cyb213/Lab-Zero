@@ -4,6 +4,10 @@ All notable changes to Lab Zero. Newest first. Versions follow [semantic version
 
 This file is what `update.sh --check` reads to show you what's new in a release — so each entry is a short, user-facing summary of what changed, not an internal commit log.
 
+## v1.8.0 — 2026-06-19
+
+- **`lab doctor` — one command to check your install is healthy.** A new read-only `bash scripts/lab-doctor.sh` inspects the whole recall engine in a single pass — virtualenv, dependencies, config, the search index, the embedding model, index freshness, and the Codex hook wiring — and prints a plain OK / WARN / FAIL report with a one-line fix for anything that's off. It exits non-zero only when something is genuinely broken (so you can wire it into your own scripts), does no network call, and changes nothing. Until now these problems only surfaced reactively and cryptically — a failed search, a silent fallback to a degraded state; now you can ask the question directly and get a straight answer. (The Codex check confirms the hook *wiring* and reminds you to run `/hooks` — it doesn't claim the trust step is done, since that's interactive.)
+
 ## v1.7.0 — 2026-06-18
 
 - **Hardened leak protection.** A defense-in-depth redaction screen now runs in the pre-commit hook (in addition to the release-time audit), catching accidental personal-data, secret, or absolute-path leaks in staged `src/`/`assets/` changes before they're committed. Mostly relevant if you maintain machinery under those paths; otherwise nothing changes for you.

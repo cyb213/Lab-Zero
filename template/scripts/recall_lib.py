@@ -302,6 +302,127 @@ def ensure_learned_glob(cfg, learned_glob="memory/LEARNED.md"):
     return True
 
 
+# ── F1: read-only install health-check (`lab doctor`) ─────────────────────────
+# Emits TSV `severity⇥check⇥detail⇥fix` lines on STDOUT for scripts/lab-doctor.sh to format.
+# Additive + read-only: introspects the DB with STDLIB sqlite3 ONLY — it never loads the
+# sqlite_vec extension (that's KNN-only; the doctor never touches chunks_vec), so it still
+# reports schema/model/freshness even when the vec/embedding deps are missing. Lazy imports
+# keep this module stdlib-only at load (a top-level `import sqlite_vec` would break `--env`
+# on the no-venv python3 fallback). DOCTOR_SCHEMA_VERSION mirrors recall-index.py's
+# SCHEMA_VERSION — importing recall-index to read it would pull in retrieval/indexer code.
+DOCTOR_SCHEMA_VERSION = 2  # keep == recall-index.py SCHEMA_VERSION
+
+
+def _doctor_last_run(state_file):
+    """Inline read of last_run_ts. recall_lib has no load_state() (it's in recall-index.py);
+    re-implement the 4-liner here rather than import the indexer. Best-effort → 0."""
+    try:
+        return json.loads(Path(state_file).read_text()).get("last_run_ts", 0)
+    except Exception:
+        return 0
+
+
+def doctor_lines():
+    """Return a list of (severity, check, detail, fix) rows — the install-health report.
+    severity ∈ {OK, WARN, FAIL, INFO}. Never raises: every probe failure becomes a row, so
+    the bash wrapper always prints a full report (the set -e R8 guard, on the python side)."""
+    import sqlite3  # stdlib — always present, even on the no-venv fallback
+
+    rows = []
+    try:
+        cfg = load()
+    except SystemExit:
+        # load() already printed a `[recall]` reason to STDERR; surface a FAIL row on STDOUT.
+        rows.append(("FAIL", "config",
+                     "recall.config.json invalid or isolation guard tripped",
+                     "fix recall.config.json (see [recall] note on stderr)"))
+        return rows
+    rows.append(("OK", "config", "source='%s' root=%s" % (cfg["source"], cfg["root"]), ""))
+
+    # deps — per-module importability (a combined `import a, b` masks the 2nd's status).
+    for mod in ("sqlite_vec", "fastembed"):
+        try:
+            __import__(mod)
+            rows.append(("OK", "deps:%s" % mod, "importable", ""))
+        except Exception:
+            rows.append(("FAIL", "deps:%s" % mod, "not importable",
+                         "run bootstrap.sh (or pip install in .venv)"))
+
+    # index + model + schema — stdlib sqlite3 only, every filter bound to cfg['source']
+    # (CRITICAL R7: a hardcoded 'lab' would false-FAIL "no index" on a factory/project DB).
+    db = cfg["db"]
+    source = cfg["source"]
+    if not os.path.exists(db):
+        rows.append(("FAIL", "index", "no index at %s" % db, "recall.sh reindex --force"))
+    else:
+        try:
+            conn = sqlite3.connect(db)
+            n = conn.execute(
+                "SELECT COUNT(*) FROM chunks WHERE source=?", (source,)
+            ).fetchone()[0]
+            if n == 0:
+                rows.append(("FAIL", "index",
+                             "no chunks for source '%s' in %s" % (source, db),
+                             "recall.sh reindex --force"))
+            else:
+                rows.append(("OK", "index", "%d chunks for source '%s'" % (n, source), ""))
+                # model match (A3, proactive)
+                models = {r[0] for r in conn.execute(
+                    "SELECT DISTINCT model FROM chunks WHERE source=?", (source,))}
+                if models == {cfg["model_name"]}:
+                    rows.append(("OK", "model", "built with '%s'" % cfg["model_name"], ""))
+                else:
+                    rows.append(("FAIL", "model",
+                                 "index built with %s but config wants '%s'"
+                                 % (sorted(models), cfg["model_name"]),
+                                 "recall.sh reindex --force"))
+                # schema — folded into ONE WARN line (reviewer Scope #7)
+                ver = conn.execute("PRAGMA user_version").fetchone()[0]
+                cols = [r[1] for r in conn.execute("PRAGMA table_info(chunks)")]
+                has_fts = conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='chunks_fts'"
+                ).fetchone() is not None
+                problems = []
+                if ver != DOCTOR_SCHEMA_VERSION:
+                    problems.append("user_version=%s (want %d)" % (ver, DOCTOR_SCHEMA_VERSION))
+                if "heading" not in cols:
+                    problems.append("no 'heading' column")
+                if not has_fts:
+                    problems.append("no 'chunks_fts' table")
+                if problems:
+                    rows.append(("WARN", "schema", "; ".join(problems),
+                                 "recall.sh reindex --force"))
+                else:
+                    rows.append(("OK", "schema",
+                                 "user_version=%s, heading + chunks_fts present" % ver, ""))
+            conn.close()
+        except Exception as e:
+            rows.append(("FAIL", "index", "DB introspection failed: %s" % e,
+                         "recall.sh reindex --force"))
+
+    # freshness — discover_files mtimes vs the inline last_run_ts. discover_files may print a
+    # `[recall]` note to STDERR (no namespace yet); harmless — doctor rows stay on STDOUT.
+    try:
+        last_run = _doctor_last_run(cfg["state_file"])
+        changed = 0
+        for f in discover_files(cfg):
+            try:
+                if os.path.getmtime(f) > last_run:
+                    changed += 1
+            except OSError:
+                continue
+        if changed:
+            rows.append(("WARN", "freshness",
+                         "%d file(s) changed since last index" % changed,
+                         "recall.sh reindex"))
+        else:
+            rows.append(("OK", "freshness", "index up to date", ""))
+    except Exception as e:
+        rows.append(("WARN", "freshness", "could not compute (%s)" % e, "recall.sh reindex"))
+
+    return rows
+
+
 def _print_env(cfg):
     """Emit shell `export` lines for recall.sh to `eval`."""
 
@@ -320,7 +441,12 @@ def _print_env(cfg):
 
 if __name__ == "__main__":
     args = sys.argv[1:]
-    if "--pending-count" in args:            # B1: the session-start nudge reads this
+    if "--doctor" in args:                   # F1: read-only install health (lab-doctor.sh)
+        # FIRST branch on purpose: `--doctor --json` must emit the TSV report, never fall
+        # through to the config-JSON catch-all below (reviewer #4 / R11).
+        for sev, check, detail, fix in doctor_lines():
+            print("%s\t%s\t%s\t%s" % (sev, check, detail, fix))
+    elif "--pending-count" in args:          # B1: the session-start nudge reads this
         print(len(pending_misses(load())))
     elif "--ensure-learned-glob" in args:    # B1: /review-corrections glob self-heal (R4)
         print("changed" if ensure_learned_glob(load()) else "unchanged")
