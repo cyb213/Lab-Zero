@@ -4,6 +4,10 @@ All notable changes to Lab Zero. Newest first. Versions follow [semantic version
 
 This file is what `update.sh --check` reads to show you what's new in a release — so each entry is a short, user-facing summary of what changed, not an internal commit log.
 
+## v1.9.0 — 2026-06-20
+
+- **New `PERMISSIONS.md`.** A hand-mapping guide for choosing equivalent permission/approval postures across Claude Code and Codex. It maps Claude's fine-grained `permissions {allow, ask, deny}` + modes to Codex's `approval_policy` + `sandbox_mode`, and notes what's lossy in each direction. It's a map, not an auto-translator: **Lab Zero sets no permissions for you** — safe, prompt-first defaults lead, and riskier postures are described rather than shipped as copy-paste config. Pointers added from README and AGENTS. (Only relevant if you run both harnesses and want to match a posture across them; otherwise nothing changes for you.)
+
 ## v1.8.0 — 2026-06-19
 
 - **`lab doctor` — one command to check your install is healthy.** A new read-only `bash scripts/lab-doctor.sh` inspects the whole recall engine in a single pass — virtualenv, dependencies, config, the search index, the embedding model, index freshness, and the Codex hook wiring — and prints a plain OK / WARN / FAIL report with a one-line fix for anything that's off. It exits non-zero only when something is genuinely broken (so you can wire it into your own scripts), does no network call, and changes nothing. Until now these problems only surfaced reactively and cryptically — a failed search, a silent fallback to a degraded state; now you can ask the question directly and get a straight answer. (The Codex check confirms the hook *wiring* and reminds you to run `/hooks` — it doesn't claim the trust step is done, since that's interactive.)

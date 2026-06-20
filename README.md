@@ -140,6 +140,8 @@ Working on Codex: your **identity** (resolved into a personal, git-ignored `AGEN
 
 **File-protection on Codex:** `bootstrap.sh` now also wires the file-protection hook for Codex — the shared `protect-files.sh` understands Codex's `apply_patch` edits and blocks writes to `.env` / `recall.config.json` (live-verified on Codex 0.137.0: an `apply_patch` edit to `.env` was blocked). It's **best-effort**: like recall, the new hook is OFF until you approve it in the `/hooks` review, and it can't protect you on older Codex builds that don't show `apply_patch` edits to hooks. **It guards the structured edit tools, not raw shell** — an agent denied an `apply_patch` can still write via a shell command (`echo >> .env`), which is gated by command approval, not this hook. (That's true on Claude too — its protect-files matches `Edit/Write`, not `Bash`.) *(Re-trust caveat: Codex keys hook trust on the hook's **command**, not the script's contents — so a future `update.sh` that changes `protect-files.sh`'s **content** won't force a fresh `/hooks` approval; changing its command would.)*
 
+**Permission posture across the two harnesses:** Claude's fine-grained `allow`/`ask`/`deny` rules and Codex's coarser `approval_policy` + `sandbox_mode` don't map one-to-one — see [PERMISSIONS.md](PERMISSIONS.md) for picking an equivalent posture by hand. Lab Zero sets none of these for you; the safe default is to change nothing (both harnesses ask before acting).
+
 </details>
 
 ## The daily flow

@@ -20,6 +20,7 @@ Your identity + working style live in `@IDENTITY.md` (imported below). Fill it i
 - **First run (fresh clone):** if there's no `.venv/` yet, the workspace isn't bootstrapped — run `bash bootstrap.sh` first (sets up the recall engine, wires the hooks, seeds memory). Then, if `IDENTITY.md` still has `<…>` placeholders, run `/setup`. If the user just says "set this up," do both, in that order.
 - **New idea:** `/kickoff` to shape it into a clear brief (the agent interviews you one question at a time, and reads any existing code the idea touches as ground truth). When it's shaped, `/new-project` graduates it into `~/Projects/<slug>/`.
 - **Continuing project work:** do it *inside* the project workspace (`cd ~/Projects/<slug>`), which has its own context, recall, and tracking. Keep the Lab for ideation and cross-project thinking.
+- **Permissions (Claude Code + Codex):** Lab Zero ships no permission overrides — both harnesses ask before acting by default, which is the safe choice. If you also run Codex and want to match a posture across them, see [PERMISSIONS.md](PERMISSIONS.md) (a by-hand orientation map; nothing is auto-translated).
 
 ## Working discipline + continuity
 - On session start: read [Log/STATUS.md](Log/STATUS.md) + the latest file in `Sessions/`, then resume.
