@@ -4,6 +4,10 @@ All notable changes to Lab Zero. Newest first. Versions follow [semantic version
 
 This file is what `update.sh --check` reads to show you what's new in a release — so each entry is a short, user-facing summary of what changed, not an internal commit log.
 
+## v1.9.1 — 2026-06-20
+
+- **Fix: `update.sh` now delivers `PERMISSIONS.md` to existing installs.** v1.9.0 added the `PERMISSIONS.md` guide and a pointer to it from your README, but `update.sh`'s copy-list didn't include the file itself — so updating to v1.9.0 refreshed the pointer without landing the file it points to (a dangling link). This adds `PERMISSIONS.md` to the copy-list, so updating now lands it. Fresh clones already had the file, so nothing changes for them.
+
 ## v1.9.0 — 2026-06-20
 
 - **New `PERMISSIONS.md`.** A hand-mapping guide for choosing equivalent permission/approval postures across Claude Code and Codex. It maps Claude's fine-grained `permissions {allow, ask, deny}` + modes to Codex's `approval_policy` + `sandbox_mode`, and notes what's lossy in each direction. It's a map, not an auto-translator: **Lab Zero sets no permissions for you** — safe, prompt-first defaults lead, and riskier postures are described rather than shipped as copy-paste config. Pointers added from README and AGENTS. (Only relevant if you run both harnesses and want to match a posture across them; otherwise nothing changes for you.)

@@ -13,7 +13,7 @@
 #       (scripts/, .claude/hooks/), ALL SIX work-ceremony skills in BOTH the
 #       canonical .agents/skills/ and the committed .claude/skills/ copies, the
 #       project template/, the engine tests/, new-project.sh, bootstrap.sh,
-#       update.sh, contribute.sh, README.md, CHANGELOG.md, VERSION, LICENSE,
+#       update.sh, contribute.sh, README.md, PERMISSIONS.md, CHANGELOG.md, VERSION, LICENSE,
 #       .env.example, the memory-seed/, and — merged in, never clobbered — the
 #       .gitignore leak-control lines.
 #   Personal (left alone): IDENTITY.md, AGENTS.md, CLAUDE.md, recall.config.json,
@@ -206,6 +206,7 @@ MACHINERY=(
   update.sh
   contribute.sh           # the up-path helper (sibling of this down-path script)
   README.md
+  PERMISSIONS.md          # consumer-facing posture map; README links to it (must travel together)
   CHANGELOG.md            # user-facing changelog (what `update.sh --check` reads)
   VERSION                 # release-stamped version line (so a clone knows what it runs)
   LICENSE
