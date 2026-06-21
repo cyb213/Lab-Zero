@@ -4,6 +4,10 @@ All notable changes to Lab Zero. Newest first. Versions follow [semantic version
 
 This file is what `update.sh --check` reads to show you what's new in a release — so each entry is a short, user-facing summary of what changed, not an internal commit log.
 
+## v1.10.0 — 2026-06-21
+
+- **First-run setup now shows the embedding-model download instead of looking frozen.** On a fresh clone, the very first index build downloads a ~100MB embedding model — which used to happen in silence, so setup looked hung for a minute or two. Setup now prints a one-time heads-up and lets the live download progress bar through, so you can see it working. Only the first-run bootstrap is affected; later runs are cached, and the manual `recall.sh reindex` command already showed progress.
+
 ## v1.9.1 — 2026-06-20
 
 - **Fix: `update.sh` now delivers `PERMISSIONS.md` to existing installs.** v1.9.0 added the `PERMISSIONS.md` guide and a pointer to it from your README, but `update.sh`'s copy-list didn't include the file itself — so updating to v1.9.0 refreshed the pointer without landing the file it points to (a dangling link). This adds `PERMISSIONS.md` to the copy-list, so updating now lands it. Fresh clones already had the file, so nothing changes for them.

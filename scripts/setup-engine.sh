@@ -33,7 +33,8 @@ _run()   { if [[ -n "${LZ_ENGINE_DRYRUN:-}" ]]; then printf '%s\n' "$*"; else "$
 _run_q() { if [[ -n "${LZ_ENGINE_DRYRUN:-}" ]]; then printf '%s\n' "$*"; else "$@" >/dev/null 2>&1 || true; fi; }
 
 setup_engine() {
-  # venv + deps (first run may download a ~100MB embedding model; needs internet).
+  # venv + deps (first run may download a ~100MB embedding model; needs internet —
+  # surfaced to the user at the reindex step below via a heads-up + the live download bar).
   if [[ ! -x "$ROOT/.venv/bin/python" ]]; then
     [[ -n "${LZ_ENGINE_DRYRUN:-}" ]] || echo "[bootstrap] creating .venv + installing recall deps…"
     _run python3 -m venv "${LZ_VENV_ARGS[@]}" "$ROOT/.venv"
@@ -89,9 +90,14 @@ setup_engine() {
   # build the recall index (best-effort; a failure is non-fatal). Single-source the
   # command via an array so the trace == the exec.
   local _reindex=(bash scripts/recall.sh reindex --force)
+  # One-time heads-up + let the model-download bar through. The heads-up is on stderr (status
+  # meta), guarded so it stays out of the dry-run trace; it prints BEFORE the success/WARN
+  # split so it shows on either outcome. The exec drops 2>&1 (keeps >/dev/null) so fastembed's
+  # stderr download bar is live while the [indexer] stdout internals stay hidden.
+  [[ -n "${LZ_ENGINE_DRYRUN:-}" ]] || echo "[bootstrap]   first run downloads a ~100MB embedding model (one-time; cached for next time)…" >&2
   if [[ -n "${LZ_ENGINE_DRYRUN:-}" ]]; then
     printf '%s\n' "${_reindex[*]}"
-  elif ( cd "$ROOT" && "${_reindex[@]}" >/dev/null 2>&1 ); then
+  elif ( cd "$ROOT" && "${_reindex[@]}" >/dev/null ); then
     echo "[bootstrap]   recall indexed"
   else
     echo "[bootstrap]   WARN: reindex failed — run 'bash scripts/recall.sh reindex --force' manually" >&2
