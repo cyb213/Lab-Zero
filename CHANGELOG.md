@@ -4,6 +4,10 @@ All notable changes to Lab Zero. Newest first. Versions follow [semantic version
 
 This file is what `update.sh --check` reads to show you what's new in a release — so each entry is a short, user-facing summary of what changed, not an internal commit log.
 
+## v1.10.1 — 2026-06-21
+
+- **New `CONTRIBUTING.md`.** A short guide on how to report bugs (open an issue) and send machinery changes upstream (`contribute.sh`) — and why you shouldn't PR this repo directly (it's a build output, overwritten each release). Docs only; nothing changes if you just run your Lab.
+
 ## v1.10.0 — 2026-06-21
 
 - **First-run setup now shows the embedding-model download instead of looking frozen.** On a fresh clone, the very first index build downloads a ~100MB embedding model — which used to happen in silence, so setup looked hung for a minute or two. Setup now prints a one-time heads-up and lets the live download progress bar through, so you can see it working. Only the first-run bootstrap is affected; later runs are cached, and the manual `recall.sh reindex` command already showed progress.
