@@ -22,7 +22,7 @@ Fill this in: the one-paragraph "what __PROJECT__ is and why it exists." Keep th
 - On session start: read [Log/STATUS.md](Log/STATUS.md) + the latest file in `Sessions/`, then resume.
 - Write progressive notes to `Sessions/YYYY-MM-DD_NNN_<slug>.md` (numbering starts at 001 for this project).
 - Tracking: `Log/{STATUS,TASKS,PLAN,DECISIONS}.md`. The pre-commit drift-gate requires all four to carry the literal `session N` before a new session-note commit lands.
-- Skills: `/wrap` (close a session), `/lab-plan` (structured planning), `/audit` (drift audit).
+- Skills: `/wrap` (close a session), `/lab-plan` (structured planning), `/audit` (drift audit), `/review-corrections` (corrections → memory), `/discover-skills` (find repeatable work to formalize).
 - Build discipline: **plan non-trivial work** with `/lab-plan` (it runs a 3-reviewer adversarial pass); **lean test-first** (TDD) wherever behavior is checkable — a failing-then-passing test is the proof, not eyeballing.
 - **One task per session**, then `/wrap`.
 

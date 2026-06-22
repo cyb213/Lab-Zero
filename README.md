@@ -42,7 +42,7 @@ Stock Claude Code already has memory — `CLAUDE.md`, the `/memory` command, a f
 ## What you get
 
 - **Your agent stops forgetting.** Semantic recall searches your docs and its own memory before it answers — so you're not re-explaining context every session, and it's far less likely to make things up. *(First run downloads a ~100MB model; after that recall runs locally, no API key.)*
-- **Good working habits, built in.** A seeded set of work-habit lessons (truth over reassurance, verify before calling something "done," plan before building) plus the ceremonies — `/lab-plan`, `/audit`, `/wrap` — come pre-wired.
+- **Good working habits, built in.** A seeded set of work-habit lessons (truth over reassurance, verify before calling something "done," plan before building) plus the ceremonies — `/lab-plan`, `/audit`, `/wrap`, `/review-corrections`, `/discover-skills` — come pre-wired.
 - **Ideas become projects in one command.** `/kickoff` shapes a raw idea into a clear brief; `/new-project` graduates it into its own self-contained workspace — no re-assembling the rig each time.
 - **Use it with Claude Code or Codex.** Claude Code works the moment you clone. Codex is also supported (one extra one-time trust step) — same workspace, your choice of agent.
 - **Clone-and-go, and it stays current.** No assembling pieces; `update.sh` pulls engine improvements without touching your identity, memories, or projects.
@@ -154,7 +154,7 @@ Working on Codex: your **identity** (resolved into a personal, git-ignored `AGEN
 
 - **Have an idea?** Say `/kickoff`. The agent interviews you to shape it — and reads any code or systems the idea touches first, so the plan is grounded in reality, not guesses. It converges on a one-liner, the problem, who it's for, what "done" looks like, and the open questions.
 - **Ready to build?** Say `/new-project`. It stamps a fresh workspace at `~/Projects/<slug>/` — its own git repo, its own memory, the full template — and registers it in your `Projects-REGISTRY.md`. To stand the new project up for **Codex** too, stamp it with `--harness`: `bash new-project.sh <slug> --harness claude,codex`. It gets the same git-ignored Codex layer the Lab does (recall + identity + ceremonies + apply_patch file-protection), after the same one-time `/hooks` trust. (Each project also ships its own `bootstrap.sh`, so you can add/drop a harness later or stand the project up after cloning it to another machine — `bash bootstrap.sh --harness claude,codex`.)
-- **Then move into the project.** `cd ~/Projects/<slug>` and work there. Each project is self-sufficient: it has its own `CLAUDE.md`, recall, and the `/lab-plan`, `/audit`, `/wrap` skills. Keep the Lab for thinking; do the building in the project.
+- **Then move into the project.** `cd ~/Projects/<slug>` and work there. Each project is self-sufficient: it has its own `CLAUDE.md`, recall, and the `/lab-plan`, `/audit`, `/wrap`, `/review-corrections`, `/discover-skills` skills. Keep the Lab for thinking; do the building in the project.
 
 Not every idea has to graduate — some are better left as notes in the Lab. That's a valid outcome.
 
@@ -189,7 +189,7 @@ your-lab/
 ├── template/              ← the project genome stamped by new-project.sh  (machinery)
 ├── tests/                 ← recall engine tests  (machinery)
 ├── .agents/
-│   └── skills/            ← the ceremonies, canonical: /setup /kickoff /new-project /lab-plan /audit /wrap
+│   └── skills/            ← the ceremonies, canonical: /setup /kickoff /new-project /lab-plan /audit /wrap /review-corrections /discover-skills
 └── .claude/
     ├── settings.json      ← hook wiring (bootstrap fills in your path)
     ├── hooks/             ← the file-protection hook
