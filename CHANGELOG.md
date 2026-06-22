@@ -4,6 +4,10 @@ All notable changes to Lab Zero. Newest first. Versions follow [semantic version
 
 This file is what `update.sh --check` reads to show you what's new in a release — so each entry is a short, user-facing summary of what changed, not an internal commit log.
 
+## v1.11.0 — 2026-06-22
+
+- **New `/discover-skills` — surface the repeatable work worth formalizing.** A ceremony that scans your workspace's own narrative (session-note titles, commit subjects, the planning/decisions logs) for work you keep doing by hand, and writes a single **read-only** review doc proposing which patterns are worth turning into a skill or script — each with a recommendation (codify / document / skip). It **proposes only**: it scaffolds nothing and changes nothing; you decide what to act on (via `/lab-plan`). A low-frequency session-start reminder points you at it once you've built up enough history, stays quiet otherwise, yields to other nudges, and is tunable/silenceable via `LAB_DISCOVER_MIN_SESSIONS` / `LAB_DISCOVER_EVERY`.
+
 ## v1.10.1 — 2026-06-21
 
 - **New `CONTRIBUTING.md`.** A short guide on how to report bugs (open an issue) and send machinery changes upstream (`contribute.sh`) — and why you shouldn't PR this repo directly (it's a build output, overwritten each release). Docs only; nothing changes if you just run your Lab.

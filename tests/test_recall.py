@@ -852,6 +852,110 @@ def test_corrections_nudge():
             check(f"c-nudge hostile-env ({label}): banner survives", "recall" in _ctx(r.stdout), r.stdout[:120])
 
 
+# ── 18. discover-skills cadence nudge (V2.1 D-064) ───────────────────────────
+# Third sibling of the update-check + corrections nudges. Surfaces /discover-skills on a
+# slow cadence behind THREE gates: (1) a HISTORY FLOOR (enough session notes to have a
+# pattern worth finding — the one gate that reads the filesystem, so it carries its own
+# test obligation incl. the empty-/absent-Sessions case); (2) CADENCE (N session_starts
+# since the last discover nudge); (3) SUPPRESS-WHEN-BUSY (yield this session if an
+# update/corrections nudge already fired — habituation control). Same discipline as the
+# siblings: one JSON envelope, set -u safe under a hostile env, stdout-silent, marker to
+# the trail.
+def _seed_notes(td, n):
+    d = td / "Sessions"
+    d.mkdir(parents=True, exist_ok=True)
+    for i in range(n):
+        (d / ("s%03d.md" % i)).write_text("# note\n")
+
+
+def test_discover_nudge():
+    print("[18] discover-skills cadence nudge (history-floor + cadence + suppress-when-busy)")
+    base = dict(os.environ)
+    cfg = json.dumps({"root": ".", "auto_memory": "none"})
+
+    # (a) fires: history>=MIN + cadence>=EVERY + no other nudge ⇒ [discover] in the SAME one
+    #     JSON object + a marker. No update.sh + no misses ⇒ discover is the only candidate.
+    with tempfile.TemporaryDirectory(prefix="dnudge-fire-") as td:
+        td = Path(td)
+        (td / "recall.config.json").write_text(cfg)
+        _seed_notes(td, 3)                              # history floor MIN=3 met
+        trail = _seed_starts(td, 2)                     # +1 appended ⇒ 3 ≥ EVERY=3
+        r = _run_hook("recall-session-start.sh", td,
+                      env={**base, "LAB_DISCOVER_MIN_SESSIONS": "3", "LAB_DISCOVER_EVERY": "3"})
+        check("d-nudge fires: exit 0", r.returncode == 0, r.stderr[-200:])
+        _parse_json("d-nudge-fire", r.stdout)           # exactly one JSON object
+        ctx = _ctx(r.stdout)
+        check("d-nudge fires: [discover] + /discover-skills",
+              "[discover]" in ctx and "/discover-skills" in ctx, ctx[:200])
+        check("d-nudge fires: still carries the recall banner (one envelope)", "recall" in ctx, ctx[:120])
+        check("d-nudge fires: marker appended",
+              '"event":"discover_nudged"' in trail.read_text(), trail.read_text()[-200:])
+
+    # (b) history-floor gate: cadence met + no other nudge, but < MIN notes ⇒ silent.
+    #     The empty-Sessions case must be silent AND not abort (the defaulting idiom — an
+    #     unbound/arithmetic abort here would kill the recall banner + the JSON).
+    with tempfile.TemporaryDirectory(prefix="dnudge-floor-") as td:
+        td = Path(td)
+        (td / "recall.config.json").write_text(cfg)
+        _seed_starts(td, 30)                            # plenty of cadence, NO Sessions/ dir
+        r = _run_hook("recall-session-start.sh", td,
+                      env={**base, "LAB_DISCOVER_MIN_SESSIONS": "20", "LAB_DISCOVER_EVERY": "3"})
+        check("d-nudge floor: exit 0 with no Sessions/ (no set -u abort)", r.returncode == 0, r.stderr[-200:])
+        _parse_json("d-nudge-floor", r.stdout)
+        check("d-nudge floor: NO [discover] with empty history", "[discover]" not in _ctx(r.stdout), _ctx(r.stdout)[:200])
+        check("d-nudge floor: banner still present", "recall" in _ctx(r.stdout), _ctx(r.stdout)[:120])
+        _seed_notes(td, 5)                              # 5 < MIN=20 ⇒ still below floor
+        r2 = _run_hook("recall-session-start.sh", td,
+                       env={**base, "LAB_DISCOVER_MIN_SESSIONS": "20", "LAB_DISCOVER_EVERY": "3"})
+        check("d-nudge floor: still silent at 5<20 notes", "[discover]" not in _ctx(r2.stdout), _ctx(r2.stdout)[:200])
+
+    # (c) cadence gate (cold-start): history>=MIN (default 20) but 1<EVERY (default 20) ⇒ no nudge.
+    with tempfile.TemporaryDirectory(prefix="dnudge-cold-") as td:
+        td = Path(td)
+        (td / "recall.config.json").write_text(cfg)
+        _seed_notes(td, 25)                             # history floor met (default 20)
+        r = _run_hook("recall-session-start.sh", td,
+                      env={k: v for k, v in base.items()
+                           if k not in ("LAB_DISCOVER_MIN_SESSIONS", "LAB_DISCOVER_EVERY")})
+        check("d-nudge cold-start: 1<EVERY ⇒ no nudge", "[discover]" not in _ctx(r.stdout), r.stdout[:200])
+        check("d-nudge cold-start: banner present", "recall" in _ctx(r.stdout), r.stdout[:120])
+
+    # (d) suppress-when-busy: update nudge fires + discover would otherwise fire ⇒ discover
+    #     yields (no [discover], no marker) — the habituation control.
+    with tempfile.TemporaryDirectory(prefix="dnudge-suppress-") as td:
+        td = Path(td)
+        (td / "recall.config.json").write_text(cfg)
+        (td / "update.sh").write_text("# stub\n")       # enables the update nudge
+        _seed_notes(td, 5)                              # discover history floor (MIN=3) met
+        trail = _seed_starts(td, 2)                     # +1 ⇒ 3 ≥ both cadences
+        r = _run_hook("recall-session-start.sh", td,
+                      env={**base, "LAB_UPDATE_CHECK_EVERY": "3",
+                           "LAB_DISCOVER_MIN_SESSIONS": "3", "LAB_DISCOVER_EVERY": "3"})
+        check("d-nudge suppress: exit 0", r.returncode == 0, r.stderr[-200:])
+        ctx = _ctx(r.stdout)
+        check("d-nudge suppress: [update] fired", "[update]" in ctx, ctx[:200])
+        check("d-nudge suppress: [discover] SUPPRESSED (yields to update)", "[discover]" not in ctx, ctx[:200])
+        check("d-nudge suppress: no discover marker written",
+              '"event":"discover_nudged"' not in trail.read_text(), trail.read_text()[-200:])
+
+    # (e) set -u SAFETY: banner survives an UNSET and a GARBAGE LAB_DISCOVER_* (abort kills banner).
+    for label, val in (("unset", None), ("garbage", "not-a-number")):
+        with tempfile.TemporaryDirectory(prefix=f"dnudge-{label}-") as td:
+            td = Path(td)
+            (td / "recall.config.json").write_text(cfg)
+            _seed_notes(td, 30)
+            _seed_starts(td, 30)
+            if val is None:
+                env = {k: v for k, v in base.items()
+                       if k not in ("LAB_DISCOVER_MIN_SESSIONS", "LAB_DISCOVER_EVERY")}
+            else:
+                env = {**base, "LAB_DISCOVER_MIN_SESSIONS": val, "LAB_DISCOVER_EVERY": val}
+            r = _run_hook("recall-session-start.sh", td, env=env)
+            check(f"d-nudge hostile-env ({label}): exit 0", r.returncode == 0, r.stderr[-200:])
+            _parse_json(f"d-nudge-{label}", r.stdout)
+            check(f"d-nudge hostile-env ({label}): banner survives", "recall" in _ctx(r.stdout), r.stdout[:120])
+
+
 # ── 17. log rotation: keep-tail K + hysteresis, dual-counter-safe (B1 D6/R1) ─
 # Both logs grow forever; rotation caps them at session start BEFORE the new sentinel.
 # Keep-tail preserves the most-recent session_start AND BOTH nudge cadence markers (which
@@ -869,7 +973,9 @@ def test_log_rotation():
         lines += ['{"ts":"X","event":"update_check_nudged"}']
         lines += ['{"ts":"X","event":"session_start"}'] * 3
         lines += ['{"ts":"X","event":"corrections_review_nudged"}']
-        lines += ['{"ts":"X","event":"session_start"}'] * 2          # 57 lines total
+        lines += ['{"ts":"X","event":"session_start"}'] * 2
+        lines += ['{"ts":"X","event":"discover_nudged"}']
+        lines += ['{"ts":"X","event":"session_start"}'] * 2          # 60 lines total
         trail.write_text("\n".join(lines) + "\n")
         misses = mem / "recall-misses.jsonl"
         misses.write_text("".join('{"ts":"t%03d","event":"miss","last_user":"x"}\n' % i for i in range(57)))
@@ -881,15 +987,17 @@ def test_log_rotation():
             return sum(1 for l in after if '"event":"session_start"' in l)
 
         pre_upd, pre_corr = since(trail, "update_check_nudged"), since(trail, "corrections_review_nudged")
+        pre_disc = since(trail, "discover_nudged")
         # K=20 ⇒ margin=5 ⇒ rotate when >25. Neither nudge fires (no update.sh; CN huge), so the
         # hook only rotates + appends one sentinel.
         r = _run_hook("recall-session-start.sh", td,
                       env={**base, "LAB_RECALL_LOG_KEEP": "20", "LAB_CORRECTION_REVIEW_EVERY": "9999"})
         check("rotation: exit 0", r.returncode == 0, r.stderr[-200:])
         tl = trail.read_text().splitlines()
-        check("rotation: trail trimmed toward K (was 57)", len(tl) <= 25, f"len={len(tl)}")
+        check("rotation: trail trimmed toward K (was 60)", len(tl) <= 25, f"len={len(tl)}")
         check("rotation: update_check_nudged marker survived", any("update_check_nudged" in l for l in tl), "")
         check("rotation: corrections_review_nudged marker survived", any("corrections_review_nudged" in l for l in tl), "")
+        check("rotation: discover_nudged marker survived", any("discover_nudged" in l for l in tl), "")
         check("rotation: last line is the fresh session_start anchor",
               '"event":"session_start"' in tl[-1], tl[-1][:80])
         check("rotation: update counter intact (pre+1, not reset)",
@@ -898,6 +1006,9 @@ def test_log_rotation():
         check("rotation: corrections counter intact (pre+1, not reset)",
               since(trail, "corrections_review_nudged") == pre_corr + 1,
               f"pre={pre_corr} post={since(trail, 'corrections_review_nudged')}")
+        check("rotation: discover counter intact (pre+1, not reset)",
+              since(trail, "discover_nudged") == pre_disc + 1,
+              f"pre={pre_disc} post={since(trail, 'discover_nudged')}")
         ml = misses.read_text().splitlines()
         check("rotation: misses trimmed to K (20)", len(ml) == 20, f"len={len(ml)}")
         check("rotation: newest miss preserved (high-water integrity)", "t056" in ml[-1], ml[-1][:80])
@@ -941,7 +1052,7 @@ def main():
               test_schema_migration, test_fts_schema_and_tokenizer, test_fts_sanitizer_and_rrf,
               test_fts_maintenance, test_fts_backfill_no_reembed, test_model_guard,
               test_learned_md_gitignored, test_misses_reader, test_ensure_learned_glob,
-              test_corrections_nudge, test_log_rotation, test_shipped_configs_learned_glob):
+              test_corrections_nudge, test_discover_nudge, test_log_rotation, test_shipped_configs_learned_glob):
         t()
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     if FAIL:

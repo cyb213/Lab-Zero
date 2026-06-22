@@ -39,10 +39,10 @@ mkdir -p "$(dirname "$TRAIL")"
 
 # ── log rotation (keep-tail K + hysteresis) — runs once/session, BEFORE the new sentinel
 # so it never drops the anchor it's about to write. Keep-tail preserves the most-recent
-# session_start (the de-noise reader greps the LAST one) AND both nudge cadence markers
-# (update_check_nudged + corrections_review_nudged are line-position-based, so dropping the
-# last one silently resets that nudge's count) AND the misses high-water-mark — all live at
-# the tail. Hysteresis (trigger only past keep+keep/4, then trim back to keep) avoids
+# session_start (the de-noise reader greps the LAST one) AND all three nudge cadence markers
+# (update_check_nudged + corrections_review_nudged + discover_nudged are line-position-based,
+# so dropping the last one silently resets that nudge's count) AND the misses high-water-mark
+# — all live at the tail. Hysteresis (trigger only past keep+keep/4, then trim back to keep) avoids
 # per-session churn. set -u SAFE: every var defaulted; offline; best-effort (no -e here).
 ROTATE_KEEP="${LAB_RECALL_LOG_KEEP:-2000}"
 [[ "$ROTATE_KEEP" =~ ^[1-9][0-9]*$ ]] || ROTATE_KEEP=2000
@@ -81,6 +81,10 @@ REGISTRY="$ROOT/Projects-REGISTRY.md"
 # recall banner + emitting malformed JSON — the D-010 failure Codex rejects). stdout
 # SILENT: the nudge goes only into $CTX, carried by the single emit_context envelope
 # below (SessionStart stdout must stay exactly one JSON object).
+# Habituation control: at most one cadence nudge "owns" a session. The update + corrections
+# blocks set this when they fire; the discover block (the least time-sensitive) yields if it's
+# already set, so the banner never stacks a third cadence line. Initialized here (set -u safe).
+_nudged_this_session=0
 if [[ -f "$ROOT/update.sh" ]]; then
   N="${LAB_UPDATE_CHECK_EVERY:-12}"
   [[ "$N" =~ ^[1-9][0-9]*$ ]] || N=12              # empty/garbage ⇒ default (set -u safe)
@@ -92,6 +96,7 @@ if [[ -f "$ROOT/update.sh" ]]; then
     CTX="$CTX
 [update] ~$since sessions since your last Lab Zero update check — run \`bash update.sh --check\` to see if a newer version is out."
     printf '{"ts":"%s","event":"update_check_nudged"}\n' "$TS" >> "$TRAIL"
+    _nudged_this_session=1
   fi
 fi
 
@@ -115,6 +120,39 @@ if [[ "$PENDING" -gt 0 ]]; then
     CTX="$CTX
 [corrections] $PENDING pending correction candidate(s) — run \`/review-corrections\` to triage them into memory."
     printf '{"ts":"%s","event":"corrections_review_nudged"}\n' "$TS" >> "$TRAIL"
+    _nudged_this_session=1
+  fi
+fi
+
+# ── discover-skills cadence nudge — periodic "sweep for formalizable work" ─────────────
+# Third sibling of the update-check + corrections blocks. Surfaces /discover-skills on a slow
+# cadence, behind THREE gates so it neither nags a young workspace nor stacks a third line on
+# an already-busy banner: (1) HISTORY FLOOR — enough session notes to plausibly hold a pattern
+# worth finding; (2) CADENCE — N session_starts since the last discover nudge (the "new work
+# accrued" proxy); (3) SUPPRESS-WHEN-BUSY — yield this session if an update/corrections nudge
+# already fired (_nudged_this_session), firing instead the next eligible session. Same
+# discipline as the siblings: set -u SAFE (every var defaulted — an abort here precedes
+# emit_context, the D-010 malformed-JSON failure Codex rejects), envs regex-validated, stdout
+# SILENT (nudge into $CTX only — one envelope), marker appended to $TRAIL. The history-floor
+# read is the one piece with no exact sibling precedent (the others don't touch the filesystem):
+# it uses the wc-pipe defaulting idiom — absolute "$ROOT/Sessions", 2>/dev/null for the
+# no-match/no-dir case, numeric-sanitized — so an empty/absent Sessions/ yields 0 silently,
+# never an abort. (V2.1, D-064.)
+DMIN="${LAB_DISCOVER_MIN_SESSIONS:-20}"
+[[ "$DMIN" =~ ^[1-9][0-9]*$ ]] || DMIN=20            # empty/garbage ⇒ default (set -u safe)
+DEVERY="${LAB_DISCOVER_EVERY:-20}"
+[[ "$DEVERY" =~ ^[1-9][0-9]*$ ]] || DEVERY=20        # empty/garbage ⇒ default (set -u safe)
+notes="$(ls "$ROOT"/Sessions/*.md 2>/dev/null | wc -l)"; notes="${notes//[^0-9]/}"; notes="${notes:-0}"
+if [[ "$_nudged_this_session" -eq 0 && "$notes" -ge "$DMIN" ]]; then
+  last_dnudge="$(grep -n '"event":"discover_nudged"' "$TRAIL" 2>/dev/null | tail -1 | cut -d: -f1)"
+  last_dnudge="${last_dnudge:-0}"                    # no marker yet ⇒ count from the start
+  dsince="$(tail -n +"$((last_dnudge+1))" "$TRAIL" 2>/dev/null | grep -c '"event":"session_start"')"
+  dsince="${dsince:-0}"
+  if [[ "$dsince" -ge "$DEVERY" ]]; then
+    CTX="$CTX
+[discover] ~$dsince sessions since the last skill-discovery sweep — run \`/discover-skills\` to surface repeated work worth formalizing."
+    printf '{"ts":"%s","event":"discover_nudged"}\n' "$TS" >> "$TRAIL"
+    _nudged_this_session=1
   fi
 fi
 
