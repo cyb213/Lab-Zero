@@ -86,43 +86,42 @@ cp "$IDENTITY" "$DEST/identity/IDENTITY.md"
 DEST="$DEST" NAME="$NAME" SLUG="$SLUG" PURPOSE="$PURPOSE" DATE="$DATE" python3 - <<'PY'
 import json, os
 from pathlib import Path
-dest=Path(os.environ["DEST"]); repl={
+dest=Path(os.environ["DEST"])
+# Free-text placeholders can carry shell/JSON-significant chars (e.g. an apostrophe in
+# --purpose). Substitute them ONLY into prose (*.md), where quoting is irrelevant — NEVER
+# into shell/code, where a raw replace corrupts the file: an apostrophe in --purpose once
+# broke the stamped git hook's single-quoted allowlist (D-070). Structured files (JSON) are
+# handled explicitly below. Every other file type is left untouched — a stray token there
+# stays visible (caught by the redaction PLACEHOLDER scan), failing safe rather than
+# silently corrupting. This is an allowlist (substitute *.md), not a denylist of skips.
+repl={
     "__PROJECT__": os.environ["NAME"], "__SLUG__": os.environ["SLUG"],
     "__PURPOSE__": os.environ["PURPOSE"], "__WORKSPACE__": str(dest),
     "__DATE__": os.environ["DATE"],
 }
 for p in dest.rglob("*"):
     if not p.is_file(): continue
+    if p.suffix != ".md": continue                 # allowlist: prose only
     if any(seg in (".git",".venv",".codex",".lab") for seg in p.parts): continue  # never touch generated layers
     try: t=p.read_text(encoding="utf-8")
     except Exception: continue
     if "__" in t:
         for k,v in repl.items(): t=t.replace(k,v)
         p.write_text(t, encoding="utf-8")
+# .claude/settings.json: substitute __WORKSPACE__ JSON-SAFELY (json.dumps escapes any
+# quote/backslash in the path) — never a raw string replace into JSON. For a normal path
+# this is byte-identical to the old behaviour. Runs here (before any harness wiring) so
+# wire_claude/wire_codex see no surviving token.
+settingsp=dest/".claude"/"settings.json"
+if settingsp.is_file():
+    s=settingsp.read_text(encoding="utf-8")
+    s=s.replace("__WORKSPACE__", json.dumps(str(dest))[1:-1])
+    settingsp.write_text(s, encoding="utf-8")
 # per-project recall config: source = slug
 cfgp=dest/"recall.config.json"; cfg=json.loads(cfgp.read_text()); cfg["source"]=os.environ["SLUG"]
 cfgp.write_text(json.dumps(cfg, indent=2)+"\n", encoding="utf-8")
 print(f"[new-project]   substituted placeholders; source={cfg['source']}")
 PY
-
-# ── venv ──────────────────────────────────────────────────────────────────────
-if [[ "$DO_VENV" -eq 1 ]]; then
-  echo "[new-project]   creating .venv (+ sqlite-vec; fastembed via system site-packages)"
-  python3 -m venv --system-site-packages "$DEST/.venv"
-  "$DEST/.venv/bin/pip" install -q sqlite-vec
-fi
-
-# ── seed memory into the project's CC namespace ──────────────────────────────
-if [[ "$DO_SEED" -eq 1 ]]; then
-  KEY="$(printf '%s' "$DEST" | tr '/._' '-')"
-  NS="$HOME/.claude/projects/$KEY/memory"
-  if [[ -d "$LAB_NS" ]]; then
-    mkdir -p "$NS"; cp "$LAB_NS"/*.md "$NS"/ 2>/dev/null || true
-    echo "[new-project]   seeded $(ls "$NS"/*.md 2>/dev/null | grep -c . ) memory files → $NS"
-  else
-    echo "[new-project]   WARN: Lab namespace $LAB_NS not found; skipped memory seed" >&2
-  fi
-fi
 
 # ── wire the Codex layer (clone-local, git-ignored) when requested ────────────
 # Dogfood the project's OWN bootstrap (one wiring path). Runs AFTER substitution and
@@ -145,6 +144,31 @@ if [[ "$DO_GIT" -eq 1 ]]; then
     git commit -q -m "scaffold $SLUG from Lab template ($DATE)"
   )
   echo "[new-project]   git initialized + drift-gate installed + initial commit"
+fi
+
+# ── venv + seed — AFTER the initial commit (D-070/D4 atomicity) ───────────────
+# These are the expensive/orphan-prone side effects, and nothing before the commit needs
+# them (the venv is gitignored; the seed lives outside DEST). Running them after the commit
+# means a failed commit leaves only the self-contained DEST dir — no orphaned venv, no
+# seeded memory namespace. Trade-off (honest, not silent): a venv/pip failure here now
+# leaves a committed-but-unindexed/unregistered repo — a smaller, self-contained half-state.
+# ── venv ──────────────────────────────────────────────────────────────────────
+if [[ "$DO_VENV" -eq 1 ]]; then
+  echo "[new-project]   creating .venv (+ sqlite-vec; fastembed via system site-packages)"
+  python3 -m venv --system-site-packages "$DEST/.venv"
+  "$DEST/.venv/bin/pip" install -q sqlite-vec
+fi
+
+# ── seed memory into the project's CC namespace ──────────────────────────────
+if [[ "$DO_SEED" -eq 1 ]]; then
+  KEY="$(printf '%s' "$DEST" | tr '/._' '-')"
+  NS="$HOME/.claude/projects/$KEY/memory"
+  if [[ -d "$LAB_NS" ]]; then
+    mkdir -p "$NS"; cp "$LAB_NS"/*.md "$NS"/ 2>/dev/null || true
+    echo "[new-project]   seeded $(ls "$NS"/*.md 2>/dev/null | grep -c . ) memory files → $NS"
+  else
+    echo "[new-project]   WARN: Lab namespace $LAB_NS not found; skipped memory seed" >&2
+  fi
 fi
 
 # ── reindex recall (workspace + seeded auto-memory) ──────────────────────────

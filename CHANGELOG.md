@@ -4,6 +4,10 @@ All notable changes to Lab Zero. Newest first. Versions follow [semantic version
 
 This file is what `update.sh --check` reads to show you what's new in a release — so each entry is a short, user-facing summary of what changed, not an internal commit log.
 
+## v1.11.2 — 2026-07-09
+
+- **Fixed: graduating a project whose name or one-line purpose contained an apostrophe could break the new workspace and abort the graduation partway through.** `new-project.sh` filled in your `--name`/`--purpose` text across *every* stamped file — including a shell script — by raw find-and-replace, so a value like `O'Brien` or `it's` produced a syntactically broken git pre-commit hook, the initial commit failed, and the new workspace was left half-created. The stamper now substitutes your text only into Markdown, wires the JSON hooks safely, and never rewrites shell files; it also builds the virtualenv and seeds memory *after* the first commit so a failed stamp leaves less behind. Only creating a *new* project was affected — existing workspaces are unchanged.
+
 ## v1.11.1 — 2026-06-22
 
 - **Docs: the README and AGENTS now list all the work ceremonies.** `/review-corrections` and `/discover-skills` ship in every Lab and stamped project but were missing from the ceremony lists in the docs — only the core `/lab-plan`, `/audit`, `/wrap` were named. They're now listed alongside the rest (Lab `README` / `AGENTS` / `CLAUDE` + the stamped-project template). Docs only; nothing changes if you just run your Lab.
