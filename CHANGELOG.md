@@ -4,6 +4,10 @@ All notable changes to Lab Zero. Newest first. Versions follow [semantic version
 
 This file is what `update.sh --check` reads to show you what's new in a release — so each entry is a short, user-facing summary of what changed, not an internal commit log.
 
+## v1.13.0 — 2026-07-12
+
+- **Oversized tracking files now block a commit (the 64 KB size warning gained a hard 128 KB tier).** v1.12.0 added a warn-only notice when a staged tracking file (`Log/STATUS.md` / `TASKS.md` / `PLAN.md` / `DECISIONS.md`) passed 64 KB — and said it *never blocks a commit*. This adds a second, blocking tier: a tracking file staged over **128 KB** now fails the pre-commit hook (whole-file readability is load-bearing — a file that big has stopped being reliably readable in one pass). The 64 KB warn level (`LAB_TRACKING_SIZE_WARN_KB`) is unchanged; the new block level is `LAB_TRACKING_SIZE_BLOCK_KB` (default 128, and it can never be set below the warn level). To land an oversized tracking file anyway, bypass the hook with `git commit --no-verify`. This only fires once a single tracking file crosses 128 KB, so if yours are a normal size nothing changes.
+
 ## v1.12.0 — 2026-07-12
 
 Bug-fix + hardening release — five engine fixes found by a full factory audit, all shipped test-first.

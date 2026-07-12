@@ -83,16 +83,20 @@ if [ -n "$new_sessions" ]; then
   done <<< "$new_sessions"
 fi
 
-# ── 1b. tracking-size gate (WARN-ONLY; W2/D-074) ──────────────────────────────
-# Whole-file readability is load-bearing: session start reads STATUS whole, and agent
-# read caps are hard byte limits. Warn — NEVER block — when a staged tracking file's
-# STAGED BLOB exceeds the threshold (default 64 KB; env-tunable via
-# LAB_TRACKING_SIZE_WARN_KB, regex-validated so an empty/garbage env can never change
-# behavior, let alone block a commit). The advice is tool-neutral (archive/evict older
-# entries — how is up to the workspace). Known limit, recorded honestly: this measures
-# BYTES; a token-dense file can defeat whole-file reads while under the threshold —
-# the wrap ceremony's ≤200-char row rule remains the density control. Bash-3.2-safe
-# (this hook ships to stamped projects on stock macOS bash).
+# ── 1b. tracking-size gate (WARN at 64 KB, BLOCK at 128 KB; W2/D-074 + W3/D-075) ───
+# Whole-file readability is load-bearing: session start reads STATUS whole, and agent read
+# caps are hard byte limits. Two tiers on a staged tracking file's STAGED BLOB size:
+#   • > warn_kb  (default 64, env LAB_TRACKING_SIZE_WARN_KB)  → WARN on stderr, commit proceeds.
+#   • > block_kb (default 128, env LAB_TRACKING_SIZE_BLOCK_KB) → BLOCK the commit (--no-verify
+#     to bypass). 128 KB = 2× warn, half the 256 KB whole-file read cap — a file past it has
+#     stopped being reliably readable. Both env overrides are regex-validated (empty/garbage ⇒
+#     default, so a broken env can never DISABLE the guard nor block below the floor); and
+#     block_kb is CLAMPED to ≥ warn_kb so a mis-set (e.g. block=1) can't hard-block every tiny
+#     commit. Advice is tool-neutral (archive older entries — how is up to the workspace; the
+#     factory has evict-tracking.py, a consumer may not, so it is NEVER named here). Known
+#     limit, recorded honestly: this measures BYTES; a token-dense file can defeat whole-file
+#     reads while under threshold — the wrap ceremony's ≤200-char row rule stays the density
+#     control. Bash-3.2-safe (this hook ships to stamped projects on stock macOS bash).
 staged_now=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
 if [ -n "$staged_now" ]; then
   # tracking list re-resolved with gate 1's config-with-fallback idiom (gate 1's copy
@@ -105,12 +109,18 @@ if [ -n "$staged_now" ]; then
   fi
   [ -z "${RECALL_TRACKING_FILES:-}" ] && RECALL_TRACKING_FILES="Log/STATUS.md Log/TASKS.md Log/PLAN.md Log/DECISIONS.md"
   warn_kb="${LAB_TRACKING_SIZE_WARN_KB:-64}"
-  [[ "$warn_kb" =~ ^[1-9][0-9]*$ ]] || warn_kb=64   # empty/garbage ⇒ default (the session-start idiom)
+  [[ "$warn_kb" =~ ^[1-9][0-9]*$ ]] || warn_kb=64      # empty/garbage ⇒ default (the session-start idiom)
+  block_kb="${LAB_TRACKING_SIZE_BLOCK_KB:-128}"
+  [[ "$block_kb" =~ ^[1-9][0-9]*$ ]] || block_kb=128   # empty/garbage ⇒ default
+  [ "$block_kb" -lt "$warn_kb" ] && block_kb="$warn_kb" # clamp: block must never fire below warn
   for f in $RECALL_TRACKING_FILES; do
     printf '%s\n' "$staged_now" | grep -qxF "$f" || continue
     sz=$(git cat-file -s ":$f" 2>/dev/null || echo 0)
-    if [ "$sz" -gt "$((warn_kb * 1024))" ]; then
-      echo "size: ⚠ $f staged at $sz bytes (> ${warn_kb} KB) — archive older entries to keep it whole-file readable. Warn-only, never blocks (threshold: LAB_TRACKING_SIZE_WARN_KB)." >&2
+    if [ "$sz" -gt "$((block_kb * 1024))" ]; then
+      echo "size: ✗ $f staged at $sz bytes (> ${block_kb} KB) — archive older entries so it stays whole-file readable. Bypass with --no-verify (threshold: LAB_TRACKING_SIZE_BLOCK_KB)." >&2
+      fails=$((fails + 1))
+    elif [ "$sz" -gt "$((warn_kb * 1024))" ]; then
+      echo "size: ⚠ $f staged at $sz bytes (> ${warn_kb} KB) — archive older entries to keep it whole-file readable. Warn-only (threshold: LAB_TRACKING_SIZE_WARN_KB)." >&2
     fi
   done
 fi
