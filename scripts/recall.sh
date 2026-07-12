@@ -104,8 +104,9 @@ SQL
       exit 2
     fi
 
-    # ID short-circuit (grep -rn; rg not assumed present).
-    IDS=$(echo "$QUERY" | grep -oE "$RECALL_CODENAME_REGEX" | sort -u | head -10 || true)
+    # ID short-circuit (grep -rn; rg not assumed present). printf, not echo — a query
+    # starting with a dash would be eaten as echo flags (same class as the E1 site below).
+    IDS=$(printf '%s\n' "$QUERY" | grep -oE "$RECALL_CODENAME_REGEX" | sort -u | head -10 || true)
     if [[ -n "$IDS" ]]; then
       echo "## ID short-circuit"
       DIRS=()
@@ -128,7 +129,11 @@ SQL
     # Trail (feed-denominator metric).
     TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     QESC=$(printf '%s' "$QUERY" | "$VENV_PY" -c "import sys,json;print(json.dumps(sys.stdin.read()))")
-    IDC=$(echo "$IDS" | grep -c . 2>/dev/null || echo 0)
+    # grep -c ALWAYS prints a count (0 on empty input) — it exits 1 then, so `|| true`
+    # only shields the exit code; the old `|| echo 0` double-printed ("0\n0") and split
+    # the JSON line below (E1, W2/D-074). The ${IDC:-0} belt keeps the value numeric
+    # even if grep dies abnormally, so this line can never mint a fresh corrupt shape.
+    IDC=$(printf '%s' "$IDS" | grep -c . || true); IDC="${IDC:-0}"
     printf '{"ts":"%s","event":"search","query":%s,"id_hits":%s}\n' "$TS" "$QESC" "$IDC" >> "$TRAIL"
     ;;
 esac

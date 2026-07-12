@@ -4,6 +4,16 @@ All notable changes to Lab Zero. Newest first. Versions follow [semantic version
 
 This file is what `update.sh --check` reads to show you what's new in a release — so each entry is a short, user-facing summary of what changed, not an internal commit log.
 
+## v1.12.0 — 2026-07-12
+
+Bug-fix + hardening release — five engine fixes found by a full factory audit, all shipped test-first.
+
+- **Fixed: recall-trail corruption.** A search with no ID hits could write malformed JSON lines into `memory/recall-trail.jsonl`; the trail now always appends exactly one valid line per search. `lab doctor` gains `trail:jsonl` / `misses:jsonl` validity rows, so if an older trail already carries corrupt lines you'll see a plain `WARN N/M unparseable` instead of silent rot.
+- **Fixed: harness wiring broke on quotes in the workspace path.** `scripts/wire-harness.sh` now JSON-escapes the workspace root, so a `"` or `\` in your path no longer produces invalid `settings.json` / `hooks.json`.
+- **Fixed: `setup-engine.sh` crash under `set -u`** when the extra-args array is empty (bash-3.2-safe guard; behavior otherwise unchanged).
+- **Pre-commit hook hardening.** The drift gate now follows renames (`git mv`), reads *staged* content instead of the working tree (an untracked or unstaged edit can no longer satisfy — or slip past — the gate), and adds a warn-only tracking-file size warning at 64 KB (`LAB_TRACKING_SIZE_WARN_KB`; it never blocks a commit).
+- **`/wrap` gains a "reconcile superseded claims" duty** — a session that ships work now also corrects any older "not started / not done" claims about it in the tracking files. Plus docs cleanup: kickoff points at `IDENTITY.md` (not a stale filename), `/lab-plan` wording is harness-neutral, seed docs name the genome trio and the `.agents/skills/` ceremony directory, and drift-prone count literals were removed.
+
 ## v1.11.2 — 2026-07-09
 
 - **Fixed: graduating a project whose name or one-line purpose contained an apostrophe could break the new workspace and abort the graduation partway through.** `new-project.sh` filled in your `--name`/`--purpose` text across *every* stamped file — including a shell script — by raw find-and-replace, so a value like `O'Brien` or `it's` produced a syntactically broken git pre-commit hook, the initial commit failed, and the new workspace was left half-created. The stamper now substitutes your text only into Markdown, wires the JSON hooks safely, and never rewrites shell files; it also builds the virtualenv and seeds memory *after* the first commit so a failed stamp leaves less behind. Only creating a *new* project was affected — existing workspaces are unchanged.

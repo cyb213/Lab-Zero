@@ -420,6 +420,31 @@ def doctor_lines():
     except Exception as e:
         rows.append(("WARN", "freshness", "could not compute (%s)" % e, "recall.sh reindex"))
 
+    # trail/misses JSONL validity (RC4, W2/D-074) — read-side detection of split/broken
+    # records (the E1 write bug corrupted trails silently for weeks; a log no reader
+    # validates rots invisibly). WARN, never FAIL — the engine still works; keep-tail
+    # rotation ages the bad lines out. Absent file = healthy (young install).
+    for label, log_path in (("trail:jsonl", cfg["trail"]), ("misses:jsonl", cfg["misses"])):
+        try:
+            if not os.path.exists(log_path):
+                rows.append(("OK", label, "no log yet", ""))
+                continue
+            total = bad = 0
+            with open(log_path, encoding="utf-8") as fh:
+                for ln in fh:
+                    total += 1
+                    try:
+                        json.loads(ln)
+                    except ValueError:
+                        bad += 1
+            if bad:
+                rows.append(("WARN", label, "%d/%d lines unparseable" % (bad, total),
+                             "fixed in v1.12.0; old lines rotate out (LAB_RECALL_LOG_KEEP)"))
+            else:
+                rows.append(("OK", label, "%d line(s) parse clean" % total, ""))
+        except Exception as e:
+            rows.append(("WARN", label, "could not read (%s)" % e, ""))
+
     return rows
 
 

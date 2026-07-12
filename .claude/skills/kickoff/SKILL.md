@@ -10,7 +10,7 @@ Turn a raw idea into a shaped brief that `/new-project` can graduate. The point 
 This is the front half of **"interview now, codify after."** It pairs with [`/new-project`](../new-project/SKILL.md): kickoff shapes the idea → new-project stamps it + drops the brief into `Source/INTENT.md`.
 
 ## The method (how to run the interview)
-Follow the user's working rules (`identity/IDENTITY.md`): **one question at a time, plain language, ask at genuine decision points, never batch.** Write progressive notes to the session note as you go.
+Follow the user's working rules (`IDENTITY.md`): **one question at a time, plain language, ask at genuine decision points, never batch.** Write progressive notes to the session note as you go.
 
 1. **Start open.** Ask for the idea in their own words + what triggered it. Don't pitch a plan back. One question, then listen.
 2. **Read the ground truth BEFORE interrogating.** The moment the idea touches anything that already exists — a repo, an API, a deployed system, a doc — go *read it* instead of asking the user to recall details they may not hold. Get access (e.g. a repo invite), clone read-only *outside* the workspace, map it. **The existing code is the spec.** Most follow-up questions should be answered by what you read, not by the user. But read only **enough to write a credible INTENT** — what it is, the shape of the contract, the load-bearing facts — *not* an exhaustive audit. Full endpoint maps, data verification, and deploy planning are *project* work (see "Where kickoff ends").

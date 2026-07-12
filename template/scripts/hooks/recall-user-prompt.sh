@@ -59,7 +59,8 @@ if [[ "$SESSION_START_LINE" -gt 0 ]]; then
     | grep '"event":"search"' | grep -oE "$REGEX" | sort -u || true)
 fi
 
-PROMPT_IDS=$(echo "$PROMPT" | grep -oE "$REGEX" | sort -u | head -5 || true)
+# printf, not echo — a prompt starting with a dash would be eaten as echo flags (W2/D1 sweep).
+PROMPT_IDS=$(printf '%s\n' "$PROMPT" | grep -oE "$REGEX" | sort -u | head -5 || true)
 
 NEW_IDS=""
 while IFS= read -r ID; do
@@ -68,7 +69,7 @@ while IFS= read -r ID; do
 done <<< "$PROMPT_IDS"
 
 DRIFT_HIT=""
-if echo "$PROMPT" | grep -qiE "\b(we (already )?decided|earlier we|we agreed|we said|drift(ed)?|you (didn't|missed|should have) read|already established|look it up)\b"; then
+if printf '%s\n' "$PROMPT" | grep -qiE "\b(we (already )?decided|earlier we|we agreed|we said|drift(ed)?|you (didn't|missed|should have) read|already established|look it up)\b"; then
   DRIFT_HIT=1
 fi
 

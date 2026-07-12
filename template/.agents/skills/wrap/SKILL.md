@@ -42,6 +42,8 @@ Update the workspace's tracking files (those listed in `recall.config.json` → 
 
 **De-bloat as you write:** keep tracking rows terse (≤200 chars); detail goes to `Sessions/`, `Log/plans/`, or DECISIONS.md — not into the row. If a row has grown into a paragraph, trim it to a pointer.
 
+**Reconcile superseded claims:** if this session executed, shipped, or reversed something an earlier entry recorded as pending / "NOT started", update that PLAN/DECISIONS record in place (or append a dated correction) — tracking must state the session outcome, not the pre-session state.
+
 **Drift gate:** every configured tracking file MUST contain the literal `session N` (no zero-padding) before the session-note commit will pass the pre-commit hook.
 
 ## Step 3 — Session note

@@ -28,7 +28,7 @@ The script: clean-copies the template; vendors the lab's identity file as `ident
 ```bash
 DEST=~/Projects/<slug>
 ls "$DEST"/{CLAUDE.md,recall.config.json,Source/INTENT.md,Source/SPEC.md}
-"$DEST"/.venv/bin/python "$DEST"/tests/test_recall.py   # expect 10/10
+"$DEST"/.venv/bin/python "$DEST"/tests/test_recall.py   # expect: all tests pass
 ( cd "$DEST" && bash scripts/recall.sh "how should I handle uncertainty" )   # a seeded memory is recallable
 ( cd "$DEST" && git log --oneline -1 && ls -la .git/hooks/pre-commit )       # commit + gate symlink
 grep -n "<slug>" Projects-REGISTRY.md                                         # registered

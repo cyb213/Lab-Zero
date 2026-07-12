@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # protect-files.sh — block agent writes to protected files.
 # PreToolUse hook: JSON on stdin, exit 2 = block.
 #

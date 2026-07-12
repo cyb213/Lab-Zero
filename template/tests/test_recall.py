@@ -5,9 +5,14 @@ Recall engine tests — run with the Lab venv:
 
 Proportionate per review: the load-bearing test is the index+search round-trip
 asserting NON-EMPTY, correct results (a vec load-failure and an empty index both
-look like "no results"). Plus three fast guards: the path→namespace transform,
-the C1 isolation guard, and "db path resolves under the workspace toplevel".
+look like "no results"). Plus fast guards: the path→namespace transform, the C1
+isolation guard, "db path resolves under the workspace toplevel", the session-start
+hook's one-envelope stdout contract (D-010), and the model-mismatch refusal (A3).
 No pytest dependency — plain asserts, nonzero exit on failure.
+
+NOTE (W2/D-074): this is a DELIBERATELY trimmed smoke subset — the full engine suite
+lives in the engine repo's root tests/. Refreshed for v1.12.0 (hook-envelope +
+model-guard smoke tests added); keep it lean on purpose.
 """
 
 import json
@@ -119,8 +124,71 @@ def test_roundtrip():
         check("top hit is the Celsius line", "Celsius" in out or "CLAUDE.md" in out, out[-400:])
 
 
+# ── 5. Session-start hook: stdout is exactly ONE JSON envelope (D-010) ────────
+def test_hook_envelope():
+    print("[5] session-start hook emits one hookSpecificOutput envelope (D-010)")
+    hook = SCRIPTS / "hooks" / "recall-session-start.sh"
+    with tempfile.TemporaryDirectory(prefix="recall-hook-") as td:
+        td = Path(td)
+        (td / "recall.config.json").write_text(json.dumps({"root": ".", "auto_memory": "none"}))
+        res = subprocess.run(
+            ["bash", str(hook)], cwd=str(td), input="{}",
+            capture_output=True, text=True,
+        )
+        check("hook exit 0", res.returncode == 0, res.stderr[-300:])
+        lines = [l for l in res.stdout.splitlines() if l.strip()]
+        check("stdout is exactly one line", len(lines) == 1, res.stdout[-300:])
+        try:
+            envl = json.loads(lines[0]) if lines else None
+        except ValueError:
+            envl = None
+        check(
+            "line is JSON with hookSpecificOutput.additionalContext",
+            isinstance(envl, dict) and "additionalContext" in envl.get("hookSpecificOutput", {}),
+            (lines[0][:200] if lines else "<empty stdout>"),
+        )
+
+
+# ── 6. Model-mismatch guard: the searcher refuses a foreign-model index (A3) ──
+def test_model_guard():
+    print("[6] model-mismatch guard (refuse loud, exit 2, before embedding)")
+    import sqlite3  # stdlib fixture — no index copy, no network, no embed
+
+    with tempfile.TemporaryDirectory(prefix="recall-model-") as td:
+        td = Path(td)
+        (td / "recall.config.json").write_text(
+            json.dumps({"root": ".", "source": "test", "auto_memory": "none"})
+        )
+        (td / "memory").mkdir()
+        conn = sqlite3.connect(td / "memory" / "index.db")
+        conn.execute("PRAGMA user_version = 2")
+        conn.execute(
+            "CREATE TABLE chunks(id TEXT PRIMARY KEY, path TEXT, source TEXT, "
+            "start_line INT, end_line INT, hash TEXT, model TEXT, text TEXT, "
+            "heading TEXT, updated_at INT)"
+        )
+        conn.execute(
+            "INSERT INTO chunks VALUES('h1','CLAUDE.md','test',1,2,'abc',"
+            "'BOGUS-MODEL','hello','H',123)"
+        )
+        conn.commit()
+        conn.close()
+
+        env = {**os.environ, "RECALL_ROOT": str(td)}
+        srch = subprocess.run(
+            [PY, str(SCRIPTS / "recall-search.py"), "anything at all"],
+            cwd=str(td), env=env, capture_output=True, text=True,
+        )
+        # exit 2 alone is ambiguous ("no index" exits 2 too) — assert the stderr text.
+        check("searcher exits 2", srch.returncode == 2,
+              f"rc={srch.returncode} err={srch.stderr[-300:]}")
+        check("stderr names the model mismatch", "index built with model" in srch.stderr,
+              srch.stderr[-300:])
+
+
 def main():
-    for t in (test_transform, test_isolation_guard, test_db_under_root, test_roundtrip):
+    for t in (test_transform, test_isolation_guard, test_db_under_root, test_roundtrip,
+              test_hook_envelope, test_model_guard):
         t()
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     if FAIL:

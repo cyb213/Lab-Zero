@@ -52,7 +52,7 @@ Set status to `review`. Tell the user the plan is ready.
 
 After the user approves the draft for review (or immediately if they say "go"):
 
-Spawn **3 reviewer agents in parallel** (Agent tool), each with a focused, adversarial domain. Tell each to be skeptical and concrete, and to ground every finding in the actual files (read them) — not vibes:
+Run **3 adversarial reviewer passes** — in parallel where the harness supports subagents, sequentially otherwise — each with a focused, adversarial domain. Tell each to be skeptical and concrete, and to ground every finding in the actual files (read them) — not vibes:
 
 1. **Feasibility** — can each task be built with the available tools, patterns, and dependencies? Are the estimates realistic?
 2. **Risk** — what breaks? Failure modes, data loss, security gaps, regression potential, isolation violations.

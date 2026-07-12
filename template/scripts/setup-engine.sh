@@ -37,7 +37,10 @@ setup_engine() {
   # surfaced to the user at the reindex step below via a heads-up + the live download bar).
   if [[ ! -x "$ROOT/.venv/bin/python" ]]; then
     [[ -n "${LZ_ENGINE_DRYRUN:-}" ]] || echo "[bootstrap] creating .venv + installing recall deps…"
-    _run python3 -m venv "${LZ_VENV_ARGS[@]}" "$ROOT/.venv"
+    # ${arr[@]+…} guard: the Lab flavor sets LZ_VENV_ARGS=() and stock macOS bash 3.2
+    # treats an empty array as unbound under set -u → fatal (E3, W2/D-074). The guarded
+    # expansion emits nothing for an empty array and the same words otherwise.
+    _run python3 -m venv ${LZ_VENV_ARGS[@]+"${LZ_VENV_ARGS[@]}"} "$ROOT/.venv"
   fi
   _run_q "$ROOT/.venv/bin/pip" install -q --upgrade pip
   _run "$ROOT/.venv/bin/pip" install -q "${LZ_PIP_DEPS[@]}"

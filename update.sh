@@ -10,7 +10,7 @@
 #     bash update.sh --help
 #
 #   Machinery (refreshed from upstream): the recall + file-protection engine
-#       (scripts/, .claude/hooks/), ALL EIGHT work-ceremony skills in BOTH the
+#       (scripts/, .claude/hooks/), ALL shipped work-ceremony skills in BOTH the
 #       canonical .agents/skills/ and the committed .claude/skills/ copies, the
 #       project template/, the engine tests/, new-project.sh, bootstrap.sh,
 #       update.sh, contribute.sh, README.md, PERMISSIONS.md, CHANGELOG.md, VERSION, LICENSE,
@@ -212,8 +212,8 @@ MACHINERY=(
   LICENSE
   .env.example            # engine env template (your live .env stays personal)
   memory-seed
-  .agents/skills          # canonical ceremonies — ALL eight (audit discover-skills kickoff lab-plan new-project review-corrections setup wrap)
-  .claude/skills          # committed Claude Code copies — ALL eight
+  .agents/skills          # canonical ceremonies — ALL shipped skills (one dir per skill; whole-dir checkout)
+  .claude/skills          # committed Claude Code copies — ALL shipped skills
   .claude/hooks           # file-protection + any Claude hook scripts (recall hooks live under scripts/)
 )
 

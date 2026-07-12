@@ -28,8 +28,12 @@ repo_root=$(git rev-parse --show-toplevel)
 fails=0
 
 # ── 1. tracking-drift gate ────────────────────────────────────────────────────
+# AR, not A (G4a, W2/D-074): a `git mv` of a session note is a staged RENAME, which
+# --diff-filter=A silently skips. --name-only prints the rename DESTINATION, so the
+# marker derives from the new name. Accepted cost: an archival `git mv` of an OLD
+# note now demands that note's markers — bypass with --no-verify (real reason only).
 new_sessions=$(
-  git diff --cached --name-only --diff-filter=A 2>/dev/null \
+  git diff --cached --name-only --diff-filter=AR 2>/dev/null \
     | grep -E '^Sessions/[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{3}_.*\.md$' || true
 )
 if [ -n "$new_sessions" ]; then
@@ -66,12 +70,49 @@ if [ -n "$new_sessions" ]; then
     fi
 
     for f in "${tracking[@]}"; do
-      if ! grep -qF "$marker" "$repo_root/$f" 2>/dev/null; then
-        echo "drift: $f missing '$marker' (from new session note $note)" >&2
+      # Read the STAGED blob, not the working tree (G4b, W2/D-074): a marker only in
+      # the worktree means the COMMIT itself still drifts. Unstaged/untracked file ⇒
+      # marker-missing — the correct fail direction. grep WITHOUT -q on purpose: -q's
+      # early exit can SIGPIPE `git show` on blobs larger than the pipe buffer, and
+      # under pipefail that would false-BLOCK a passing marker check.
+      if ! git show ":$f" 2>/dev/null | grep -F "$marker" >/dev/null; then
+        echo "drift: staged $f missing '$marker' (from new session note $note)" >&2
         fails=$((fails + 1))
       fi
     done
   done <<< "$new_sessions"
+fi
+
+# ── 1b. tracking-size gate (WARN-ONLY; W2/D-074) ──────────────────────────────
+# Whole-file readability is load-bearing: session start reads STATUS whole, and agent
+# read caps are hard byte limits. Warn — NEVER block — when a staged tracking file's
+# STAGED BLOB exceeds the threshold (default 64 KB; env-tunable via
+# LAB_TRACKING_SIZE_WARN_KB, regex-validated so an empty/garbage env can never change
+# behavior, let alone block a commit). The advice is tool-neutral (archive/evict older
+# entries — how is up to the workspace). Known limit, recorded honestly: this measures
+# BYTES; a token-dense file can defeat whole-file reads while under the threshold —
+# the wrap ceremony's ≤200-char row rule remains the density control. Bash-3.2-safe
+# (this hook ships to stamped projects on stock macOS bash).
+staged_now=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
+if [ -n "$staged_now" ]; then
+  # tracking list re-resolved with gate 1's config-with-fallback idiom (gate 1's copy
+  # is scoped inside its new-note branch, so it may not have run).
+  VENV_PY="$repo_root/.venv/bin/python"
+  [ -x "$VENV_PY" ] || VENV_PY="python3"
+  RECALL_TRACKING_FILES=""
+  if [ -f "$repo_root/scripts/recall_lib.py" ]; then
+    eval "$("$VENV_PY" "$repo_root/scripts/recall_lib.py" --env 2>/dev/null | grep '^export RECALL_TRACKING_FILES=')" || true
+  fi
+  [ -z "${RECALL_TRACKING_FILES:-}" ] && RECALL_TRACKING_FILES="Log/STATUS.md Log/TASKS.md Log/PLAN.md Log/DECISIONS.md"
+  warn_kb="${LAB_TRACKING_SIZE_WARN_KB:-64}"
+  [[ "$warn_kb" =~ ^[1-9][0-9]*$ ]] || warn_kb=64   # empty/garbage ⇒ default (the session-start idiom)
+  for f in $RECALL_TRACKING_FILES; do
+    printf '%s\n' "$staged_now" | grep -qxF "$f" || continue
+    sz=$(git cat-file -s ":$f" 2>/dev/null || echo 0)
+    if [ "$sz" -gt "$((warn_kb * 1024))" ]; then
+      echo "size: ⚠ $f staged at $sz bytes (> ${warn_kb} KB) — archive older entries to keep it whole-file readable. Warn-only, never blocks (threshold: LAB_TRACKING_SIZE_WARN_KB)." >&2
+    fi
+  done
 fi
 
 # ── 2. skills-sync gate ───────────────────────────────────────────────────────

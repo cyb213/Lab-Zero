@@ -22,12 +22,15 @@
 # ── Claude wiring (committed-substitute, unchanged): __WORKSPACE__ -> abs path ──
 wire_claude() {
   ROOT="$ROOT" python3 - <<'PY'
-import os, pathlib
+import json, os, pathlib
 root = os.environ["ROOT"]
 p = pathlib.Path(root) / ".claude" / "settings.json"
 t = p.read_text()
 if "__WORKSPACE__" in t:
-    p.write_text(t.replace("__WORKSPACE__", root))
+    # json.dumps(root)[1:-1] = the path as a JSON string-literal body — a `"` or `\`
+    # in the workspace path stays valid JSON (E2, W2/D-074; the D-070 idiom from
+    # new-project.sh). Byte-identical to the raw path for quote/backslash-free ASCII.
+    p.write_text(t.replace("__WORKSPACE__", json.dumps(root)[1:-1]))
     print("[bootstrap]   wired Claude hooks -> " + root)
 else:
     print("[bootstrap]   Claude hooks already wired (re-run with a fresh checkout to re-wire)")
@@ -71,7 +74,8 @@ for entry in src.get("PreToolUse", []):
 if prot:
     hooks["PreToolUse"] = prot
 
-blob = json.dumps({"hooks": hooks}, indent=2).replace("__WORKSPACE__", root)
+# the JSON-escaped body, not the raw path — same E2 guard as wire_claude above
+blob = json.dumps({"hooks": hooks}, indent=2).replace("__WORKSPACE__", json.dumps(root)[1:-1])
 (cdir / "hooks.json").write_text(blob + "\n")
 
 # (b) feature flag — ensure features.hooks = true in .codex/config.toml via a
