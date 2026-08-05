@@ -26,7 +26,7 @@ Your identity + working style live in `@IDENTITY.md` (imported below). Fill it i
 - On session start: read [Log/STATUS.md](Log/STATUS.md) + the latest file in `Sessions/`, then resume.
 - Write progressive notes to `Sessions/YYYY-MM-DD_NNN_<slug>.md` as you work (numbering starts at 001).
 - **One task per session**, then `/wrap`. Don't batch tasks or auto-start the next from a backlog.
-- **Plan before building anything non-trivial** (`/lab-plan` — it runs a 3-reviewer adversarial pass). **Lean test-first** where behavior is checkable. Run **`/audit`** when tracking or specs may have drifted from reality.
+- **Plan consequential work** — any change to the shipped engine, a skill/template, a hook, recall, security, or a release (a small self-contained change doesn't need it) — with **`/lab-plan`** (up to a 3-reviewer adversarial pass, scaled to the change). **Lean test-first** where behavior is checkable. Run **`/audit`** when tracking or specs may have drifted from reality.
 - The Lab runs **light ceremony** (`Log/STATUS.md` + session notes); graduated projects get the fuller convention (STATUS / TASKS / PLAN / DECISIONS). The full set of work ceremonies in `.agents/skills/` is available in both (that directory is the always-current list).
 
 ## Recall

@@ -81,7 +81,7 @@ auto-build:
 
 - **CODIFY-AS-SKILL** — judgment-laden, multi-step, benefits from an adversarial design
   pass. Terminal action: *"run `/lab-plan <slug>`"* — the proposed skill gets its own
-  3-reviewer plan before any build. **Do not write the skill here.**
+  `/lab-plan` pass before any build. **Do not write the skill here.**
 - **CODIFY-AS-SCRIPT** — mechanical, deterministic, no judgment. Terminal action:
   *"write `scripts/<slug>.sh`"* (human-initiated). **Do not write the script here.**
 - **DOCUMENT** — worth capturing as a runbook/checklist, not worth executable machinery.

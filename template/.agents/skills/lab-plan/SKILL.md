@@ -1,11 +1,13 @@
 ---
 name: lab-plan
-description: Run a structured planning session — interview the sources of truth, draft, adversarial review (3 reviewers), approve, update docs. Use when building a new feature or phase that touches more than ~2 files.
+description: Run a structured planning session — interview the sources of truth, draft, adversarial review (up to 3 reviewers, scaled to the change), approve, update docs. Required for any change to the shipped engine, a skill/template, a hook, recall, security, or a public release, and for features spanning several files or systems; a small change touching none of those doesn't need it.
 ---
 
 # Planning Session Protocol
 
-You are running a structured planning session. Follow every step in order. Do not skip steps. Do not combine steps.
+You are running a structured planning session. Follow the steps in order, but **scale the ceremony to the change** (see the floor checklist below): a floor-checklist change runs every step in full; a small, self-contained change that touches no floor item may merge or skip steps that don't earn their weight — but never skip the SoT grounding (Step 2), the approval gate (Step 5), the adversarial pass for any floor-checklist change (Step 4), or the tracking updates when DECISIONS/STATUS change (Step 6).
+
+**Floor checklist — run the full ceremony (all 3 adversarial lenses included) whenever the change touches ANY of these:** the shipped engine (`src/`) · a shipped skill / template / assets file · a git-hook · recall scoring or indexing · security / redaction / auth · user data · a public release · or a feature spanning several files or systems. These are objective properties of the diff, not a judgment call about how big the change *feels* — an author who under-rates their own change is the exact failure this pass guards against. Scale down (Step 4) only when every box is unchecked.
 
 ## Arguments
 
@@ -52,7 +54,9 @@ Set status to `review`. Tell the user the plan is ready.
 
 After the user approves the draft for review (or immediately if they say "go"):
 
-Run **3 adversarial reviewer passes** — in parallel where the harness supports subagents, sequentially otherwise — each with a focused, adversarial domain. Tell each to be skeptical and concrete, and to ground every finding in the actual files (read them) — not vibes:
+Run **up to 3** adversarial reviewer passes — feasibility, risk, scope — **scaled to the change, not fixed at 3.** If the change hits the floor checklist above, run all 3 (mandatory). Otherwise scale down: a moderate change runs **risk plus one other** (risk is never the lens you drop — it's the one with the track record for catching the real breakage); a genuinely small change that touches no floor item may run **risk only**, or **none** if you can fully verify it yourself in a few tool calls. Prefer higher reasoning `effort` on fewer, sharper lenses over spawning agents for their own sake — and don't spawn reviewers to double-check work you can verify yourself; reserve the pass for genuinely independent adversarial perspective on a *plan*, not self-review.
+
+Run each pass in parallel where the harness supports subagents, sequentially otherwise — each with a focused, adversarial domain. Tell each to be skeptical and concrete, and to ground every finding in the actual files (read them) — not vibes:
 
 1. **Feasibility** — can each task be built with the available tools, patterns, and dependencies? Are the estimates realistic?
 2. **Risk** — what breaks? Failure modes, data loss, security gaps, regression potential, isolation violations.
@@ -61,7 +65,7 @@ Run **3 adversarial reviewer passes** — in parallel where the harness supports
 Each dispatch prompt includes: the plan file path; the relevant `Source/` + `Log/STATUS.md` + `Log/DECISIONS.md` paths; any source files the plan proposes to change (so findings are grounded); and an instruction to return structured findings — area/task, issue, severity (critical/important/minor), suggested fix.
 
 ### Consolidation
-After all three return:
+After the reviewer passes return:
 1. Collect findings into one numbered list.
 2. Categorize: critical (must fix) / important (should fix) / minor.
 3. Apply critical + important fixes to the plan.

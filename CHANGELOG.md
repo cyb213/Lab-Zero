@@ -4,6 +4,10 @@ All notable changes to Lab Zero. Newest first. Versions follow [semantic version
 
 This file is what `update.sh --check` reads to show you what's new in a release — so each entry is a short, user-facing summary of what changed, not an internal commit log.
 
+## v1.14.0 — 2026-08-05
+
+- **The `/lab-plan` planning ceremony now scales to the change instead of firing fixed.** It used to trigger on a file-count ("more than ~2 files") and always run exactly 3 adversarial reviewer passes. Now it triggers on *what the change touches* — a fixed checklist (the shipped engine, a skill/template, a hook, recall, security, or a public release, plus genuinely wide multi-file features) — and treats 3 reviewers as a **ceiling, not a floor**: a change that trips the checklist still gets the full pass, but a small self-contained change can run fewer reviewers (or none), with the risk lens never the one dropped. If you don't use `/lab-plan`, nothing changes for you.
+
 ## v1.13.0 — 2026-07-12
 
 - **Oversized tracking files now block a commit (the 64 KB size warning gained a hard 128 KB tier).** v1.12.0 added a warn-only notice when a staged tracking file (`Log/STATUS.md` / `TASKS.md` / `PLAN.md` / `DECISIONS.md`) passed 64 KB — and said it *never blocks a commit*. This adds a second, blocking tier: a tracking file staged over **128 KB** now fails the pre-commit hook (whole-file readability is load-bearing — a file that big has stopped being reliably readable in one pass). The 64 KB warn level (`LAB_TRACKING_SIZE_WARN_KB`) is unchanged; the new block level is `LAB_TRACKING_SIZE_BLOCK_KB` (default 128, and it can never be set below the warn level). To land an oversized tracking file anyway, bypass the hook with `git commit --no-verify`. This only fires once a single tracking file crosses 128 KB, so if yours are a normal size nothing changes.

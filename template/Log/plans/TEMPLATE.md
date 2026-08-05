@@ -44,4 +44,4 @@
 - [ ] <checkable acceptance criterion>
 
 ### Adversarial review
-<3 reviewers (feasibility/risk/scope) per the `/plan` skill; consolidate; apply critical+important fixes here.>
+<Adversarial review (feasibility/risk/scope — up to 3 reviewers, scaled to the change) per the `/lab-plan` skill; consolidate; apply critical+important fixes here.>
