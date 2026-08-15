@@ -9,7 +9,7 @@ Capabilities available in every session here:
 - **Recall** — semantic search over your docs + the agent's long-term memory.
 - **Seeded memory** — a starter set of work-habit lessons the agent follows (extend it as you go).
 - **Continuity** — STATUS + session notes so any session picks up cold.
-- **Skills** — `/setup` (personalize), `/kickoff` (shape a raw idea), `/new-project` (graduate it), plus the full set of work ceremonies shipped in `.agents/skills/` — one directory per skill; each `SKILL.md`'s frontmatter says when to use it (that directory is the always-current list).
+- **Skills** — `/setup` (personalize), `/kickoff` (shape a raw idea), `/new-project` (graduate it), plus the full set of ceremonies shipped in `.agents/skills/` — one directory per skill; each `SKILL.md`'s frontmatter says when to use it (that directory is the always-current list).
 
 ## Who you're working with
 Your identity + working style live in `@IDENTITY.md` (imported below). Fill it in via `/setup` or by hand. Everything the agent should know about *you* goes there, not here.
@@ -31,7 +31,7 @@ Your identity + working style live in `@IDENTITY.md` (imported below). Fill it i
 - Write progressive notes to `Sessions/YYYY-MM-DD_NNN_<slug>.md` as you work (numbering starts at 001).
 - **One task per session**, then `/wrap`. Don't batch tasks or auto-start the next from a backlog.
 - **Plan consequential work** — any change to the shipped engine, a skill/template, a hook, recall, security, or a release (a small self-contained change doesn't need it) — with **`/lab-plan`** (up to a 3-reviewer adversarial pass, scaled to the change). **Lean test-first** where behavior is checkable. Run **`/audit`** when tracking or specs may have drifted from reality.
-- The Lab runs **light ceremony** (`Log/STATUS.md` + session notes); graduated projects get the fuller convention (STATUS / TASKS / PLAN / DECISIONS). The full set of work ceremonies in `.agents/skills/` is available in both (that directory is the always-current list).
+- The Lab runs **light ceremony** (`Log/STATUS.md` + session notes); graduated projects get the fuller convention (STATUS / TASKS / PLAN / DECISIONS). The full set of ceremonies in `.agents/skills/` is available in both (that directory is the always-current list).
 
 ## Recall
 `bash scripts/recall.sh "<query>"` — semantic search over this workspace + the agent's seeded memory. `reindex` after material doc changes. `stats` to inspect the index. Config: [recall.config.json](recall.config.json).

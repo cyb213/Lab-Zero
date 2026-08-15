@@ -19,3 +19,13 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+
+---
+
+Third-party acknowledgements
+
+The `/bro` skill is inspired by the MIT-licensed bro-skill by Hermes Agent + Luka
+(https://github.com/luchasarie/bro-skill). The text shipped here is original, and the
+upstream copyright and permission notice travels inside the skill file itself
+(`.agents/skills/bro/SKILL.md`), so it stays with the file wherever it is copied.
