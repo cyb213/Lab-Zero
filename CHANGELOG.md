@@ -4,6 +4,10 @@ All notable changes to Lab Zero. Newest first. Versions follow [semantic version
 
 This file is what `update.sh --check` reads to show you what's new in a release — so each entry is a short, user-facing summary of what changed, not an internal commit log.
 
+## v1.15.0 — 2026-08-15
+
+- **Agents now answer you in plain, adaptive language.** Both shipped constitutions — the root `AGENTS.md` and the `template/AGENTS.md` that graduates into a new project — gain a short block: match the depth to the technical level you declared in `IDENTITY.md`, lead with the answer, explain or avoid jargon, keep sentences to one idea, and give one step per sentence when you have to act. The mechanics are borrowed from **ASD-STE100 (Simplified Technical English)** — short sentences, active voice, one name per thing — without its controlled dictionary. Two deliberate limits: it **never** trades exactness for simplicity (paths, commands, flags and versions stay verbatim, and a real caveat is never dropped to sound cleaner), and it doesn't touch code, tables, quoted output, or files the agent writes. Your own stated preferences still outrank it. This is guidance in the always-loaded constitution, not an enforced check. **On an existing install:** `update.sh` refreshes `template/AGENTS.md` for you, but your root `AGENTS.md` is yours — it's never overwritten, so copy the block across by hand if you want it there too.
+
 ## v1.14.0 — 2026-08-05
 
 - **The `/lab-plan` planning ceremony now scales to the change instead of firing fixed.** It used to trigger on a file-count ("more than ~2 files") and always run exactly 3 adversarial reviewer passes. Now it triggers on *what the change touches* — a fixed checklist (the shipped engine, a skill/template, a hook, recall, security, or a public release, plus genuinely wide multi-file features) — and treats 3 reviewers as a **ceiling, not a floor**: a change that trips the checklist still gets the full pass, but a small self-contained change can run fewer reviewers (or none), with the risk lens never the one dropped. If you don't use `/lab-plan`, nothing changes for you.
