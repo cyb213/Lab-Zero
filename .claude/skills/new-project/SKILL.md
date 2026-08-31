@@ -45,6 +45,7 @@ Open `Source/INTENT.md` + `Source/SPEC.md` and fill them WITH the user (intervie
 
 ## Notes
 - **Adding/dropping a harness later:** each project ships its own `bootstrap.sh`. Run *inside the project*, `bash bootstrap.sh --harness claude,codex` re-wires it (or `--harness claude` drops Codex) — the same command also stands a project up after cloning it to another machine. This is per-project and run in that project's own tree; `/new-project` and the Lab never reach back to retro-upgrade an already-graduated project.
-- Identity is **vendored** (a copy). To propagate a later identity change, a future `lab sync <slug>` re-pulls it (not built yet).
+- Identity is **vendored** (a copy) and stays one — nothing re-pulls it. To propagate a later identity change, copy the file across by hand.
+- **Engine updates, though, are covered:** each project ships its own `update.sh`. Run *inside the project*, `bash update.sh` refreshes machinery (scripts, tests, skills, hooks) from the latest published release and leaves the personal layer alone; `bash update.sh --check` is the read-only look. Opt-in, never automatic — a project changes only when someone runs it there.
 - The project is fully walled: its own repo, its own memory namespace. It never reads/writes the lab or any other workspace.
 - For a structural dry-run with NO side effects (no venv/seed/git/registry): `new-project.sh <slug> --root /tmp --no-venv --no-seed --no-git --no-reindex`.

@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # new-project.sh — graduate an idea into its own full-rig workspace, stamped
 # from your lab's template/. Each project is self-contained (clean copy,
-# vendored identity). Identity is VENDORED (a copy of the lab's identity file);
-# a future `lab sync <slug>` re-pulls engine + identity.
+# vendored identity). Identity is VENDORED (a copy of the lab's identity file) and
+# stays a hand copy — nothing re-pulls it. The ENGINE half is covered: each stamped
+# project ships its own update.sh, so `bash update.sh` inside the project refreshes
+# machinery from the published release. Opt-in, never automatic.
 #
 # Usage:
 #   new-project.sh <slug> [options]

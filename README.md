@@ -187,6 +187,7 @@ your-lab/
 ├── memory-seed/           ← the starter work-habit memories
 ├── scripts/               ← the recall engine + hooks  (machinery)
 ├── template/              ← the project genome stamped by new-project.sh  (machinery)
+│                             (includes the project's own update.sh + .agents/VERSION)
 ├── tests/                 ← recall engine tests  (machinery)
 ├── .agents/
 │   └── skills/            ← the ceremonies, canonical: /setup /kickoff /new-project /lab-plan /audit /wrap /review-corrections /discover-skills /bro
@@ -223,6 +224,42 @@ git commit -m "update lab machinery"
 `update.sh` lands the **latest published release** (the newest version tag), not a mid-flight `main` — so you update to a version we actually announced. Want a specific one (or the bleeding edge)? `bash update.sh --ref v1.1.0` pins a tag; `--ref main` pulls the branch HEAD.
 
 It only refreshes the machinery paths. Your personal layer — including the constitution files you may have customized (`AGENTS.md`, `CLAUDE.md`) and `recall.config.json` — is never auto-overwritten; `update.sh` prints a one-liner to diff those against upstream by hand if you want engine-side wording changes.
+
+### Keeping your *projects* up to date
+
+Projects you graduate with `new-project.sh` get their own copy of the engine — their own `scripts/`, skills, hooks and tests. That copy is a snapshot taken at stamp time, so it doesn't move when your Lab updates.
+
+Every project stamped from **v1.17.0 or later** ships its own `update.sh`. Run it **inside the project**:
+
+```bash
+bash update.sh --check     # this project's engine version vs the latest release
+bash update.sh             # refresh this project's engine machinery
+git diff                   # review what changed
+git add -A && git commit -m "update engine machinery"
+```
+
+It reads the project's engine version from `.agents/VERSION` and pulls from the same published releases your Lab does. Same two-layer rule as above, drawn around what a *project* owns: your `Source/` genome, `AGENTS.md`/`CLAUDE.md`, `identity/`, `Log/`, `Sessions/`, `recall.config.json` and `.claude/settings.json` are yours and are never touched. Only the engine — `scripts/`, `tests/`, the skills, the hooks, `bootstrap.sh` — is refreshed.
+
+> `.claude/settings.json` is deliberately excluded. It was written at stamp time with your project's absolute path filled in; refreshing it would restore the raw template placeholder and silently disable every hook.
+
+**Projects stamped before v1.17.0** have no `update.sh` yet. Install one — run this **inside the project**, once:
+
+```bash
+git fetch -q https://github.com/cyb213/Lab-Zero.git refs/tags/v1.17.0 && git archive FETCH_HEAD template/update.sh | tar -x --strip-components=1
+```
+
+Then `bash update.sh` brings the rest of the engine — including the `.agents/VERSION` stamp — up to date. (It fetches a single tag into `FETCH_HEAD`: it adds no git remote and writes no local tag, so your project's own release tags are left alone.)
+
+**Two limits worth knowing:**
+
+- **Updating adds and overwrites, but never deletes.** A skill removed upstream leaves a stale copy behind (an "orphan"). The project's own `check-skills-sync.sh` pre-commit gate flags the skills case loudly — remove those by hand.
+- **Template *content* under your own directories never refreshes.** `Log/plans/TEMPLATE.md` and the `Source/` skeletons were stamped into your tree once and belong to your project now. That's deliberate — but it does mean an improved plan template upstream won't reach an existing project. Copy it across by hand if you want it.
+
+**Working from a fork?** Set `LAB_ZERO_UPSTREAM` to your own repo, or every project you stamp will keep pulling machinery from the canonical one:
+
+```bash
+LAB_ZERO_UPSTREAM=https://github.com/you/your-fork.git bash update.sh
+```
 
 ## Troubleshooting
 

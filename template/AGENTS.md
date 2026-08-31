@@ -4,7 +4,7 @@
 > Graduated from the Lab on __DATE__. The **canonical, harness-agnostic** constitution for this workspace — loaded by whichever coding agent you use (via this file directly, or via the `CLAUDE.md` wrapper for Claude Code). Loaded into every __PROJECT__ session.
 
 ## Who you're working with + how to work with them
-Shared identity is the vendored copy `@identity/IDENTITY.md` (imported below). It was copied from your lab at stamp time; run `lab sync __SLUG__` (when available) to re-pull updates. Read it as part of this file.
+Shared identity is the vendored copy `@identity/IDENTITY.md` (imported below). It was copied from your lab at stamp time and is **yours now** — this project's own. Nothing re-pulls it; if you change your lab's identity file and want that change here, copy it across by hand. (Engine machinery is different: `bash update.sh` refreshes it from the published release, and never touches this file.) Read it as part of this file.
 
 @identity/IDENTITY.md
 
