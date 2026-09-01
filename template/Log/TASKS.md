@@ -1,6 +1,6 @@
 # __PROJECT__ — TASKS
 
-> Live dashboard. Keep rows ≤200 chars; detail goes to Sessions/, Log/plans/, or DECISIONS.md.
+> Live dashboard. Keep rows ≤200 bytes (pre-commit warns on newly added rows); detail goes to Sessions/, Log/plans/, or DECISIONS.md.
 > Updated: __DATE__ (scaffold)
 > Last verified: __DATE__
 

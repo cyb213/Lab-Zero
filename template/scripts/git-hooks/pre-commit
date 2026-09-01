@@ -95,8 +95,8 @@ fi
 #     commit. Advice is tool-neutral (archive older entries — how is up to the workspace; the
 #     factory has evict-tracking.py, a consumer may not, so it is NEVER named here). Known
 #     limit, recorded honestly: this measures BYTES; a token-dense file can defeat whole-file
-#     reads while under threshold — the wrap ceremony's ≤200-char row rule stays the density
-#     control. Bash-3.2-safe (this hook ships to stamped projects on stock macOS bash).
+#     reads while under threshold — gate 5 below is the per-commit density ratchet that
+#     complements it. Bash-3.2-safe (this hook ships to stamped projects on stock macOS bash).
 staged_now=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
 if [ -n "$staged_now" ]; then
   # tracking list re-resolved with gate 1's config-with-fallback idiom (gate 1's copy
@@ -114,7 +114,11 @@ if [ -n "$staged_now" ]; then
   [[ "$block_kb" =~ ^[1-9][0-9]*$ ]] || block_kb=128   # empty/garbage ⇒ default
   [ "$block_kb" -lt "$warn_kb" ] && block_kb="$warn_kb" # clamp: block must never fire below warn
   for f in $RECALL_TRACKING_FILES; do
-    printf '%s\n' "$staged_now" | grep -qxF "$f" || continue
+    # here-string, NOT `printf … | grep -q`: -q exits at the first match, and on a
+    # commit whose staged-name list exceeds the 64 KB pipe buffer printf then dies of
+    # SIGPIPE, which `set -o pipefail` reports as 141 — silently skipping this BLOCKING
+    # gate. Same scar gate 1 documents at :76-77. Proven in tests/test_precommit_gates.sh.
+    grep -qxF "$f" <<< "$staged_now" || continue
     sz=$(git cat-file -s ":$f" 2>/dev/null || echo 0)
     if [ "$sz" -gt "$((block_kb * 1024))" ]; then
       echo "size: ✗ $f staged at $sz bytes (> ${block_kb} KB) — archive older entries so it stays whole-file readable. Bypass with --no-verify (threshold: LAB_TRACKING_SIZE_BLOCK_KB)." >&2
@@ -276,6 +280,133 @@ fi
 if [ -f "$repo_root/scripts/check-constitution-drift.sh" ]; then
   bash "$repo_root/scripts/check-constitution-drift.sh" "$repo_root" >&2 || true
 fi
+
+# ── 5. tracking density (ADVISORY — never blocks; D-099) ──────────────────────
+# Gate 1b measures whole FILES; this measures what a single commit ADDS. A file can sit
+# far under 64 KB and still be unreadable if every row is a paragraph, so the two are
+# complements, not duplicates.
+#
+# Both halves are RATCHETS: they look only at lines this commit newly adds, so existing
+# text is never flagged and nobody is asked to rewrite history to commit. Both are
+# WARN-ONLY and never touch $fails.
+#
+#   Gate A — row length in Log/TASKS.md. Prior art, not a fresh design: harmonised
+#     upstream from a downstream workspace that has run this exact ratchet since
+#     2026-08-22 and added zero over-length rows in the six commits after it landed.
+#     Indented markdown table rows are exempt (`^[[:space:]]*\|` — NOT `^\s*\|`, which
+#     is not POSIX ERE: mawk reads the `\s` as a literal `s`, so `sss| x` would be
+#     false-exempted and a genuinely indented table row false-warned).
+#   Gate B — wholly-new `## D-` entries in Log/DECISIONS.md against a byte cap. Scoped
+#     to `^## D-` in that one file on purpose: measuring every `^## ` in every tracking
+#     file fires on live append-target sections (a "## Next Up", a "## WIP", a
+#     machine-written archive index) that their owner cannot shorten. "Wholly new" means
+#     the entry's heading is itself an added line — editing one line of an existing entry
+#     is silent, so the gate is forward-looking by construction. A section ends at the
+#     next `^## ` of ANY kind, so an entry can never absorb the section that follows it.
+#
+# BYTES, forced with LC_ALL=C. MEASURED, not assumed, on one 48-byte / 43-character line:
+# under a UTF-8 locale gawk AND the BSD "one true" awk report 43, while mawk and busybox
+# awk report 48; under LC_ALL=C all four report 48. So LC_ALL=C is what makes macOS's own
+# awk agree with Linux — more load-bearing than a "mawk vs gawk" framing suggests. The
+# messages say "bytes" for the same reason. (Cosmetic limit: the row preview truncates at
+# 70 BYTES, so it can end mid-character.)
+#
+# KNOWN LIMITS of measuring an entry off a diff — recorded rather than hidden:
+#   • Gate B counts ADDED-LINE bytes. A new entry repeating a block verbatim from
+#     elsewhere in the file has those lines attributed to the existing copy, so the entry
+#     is UNDER-reported and can slip under the cap. False negatives only, and warn-only.
+#   • A whole-file rewrite (an LF→CRLF conversion, say) re-adds every heading, so every
+#     over-cap entry reads as new. Rare, warn-only, and self-evident when it happens.
+#   • Only `^## D-` opens an entry, so a decision written at another heading level is
+#     never measured.
+#
+# Staged status R is excluded (--diff-filter=ACM, no R): a rename can present every line
+# of a file as added and would light up the whole thing for a move that changed nothing.
+#
+# `( … ) || true` IS LOAD-BEARING, NOT DEFENSIVE HABIT — the same scar as gate 4 above.
+# This hook runs `set -euo pipefail` (line 25). Any non-zero anywhere in this block — a
+# malformed awk program, an unexpected git failure — would otherwise kill the hook, ABORT
+# the user's commit and skip the verdict block below, with NO output explaining why, in
+# every tree that has pulled this engine. Wrapping the whole block makes that impossible:
+# the worst case degrades to "the advisory silently did not run". The shipped suite proves
+# it by deliberately breaking the gate and asserting the commit still exits 0.
+(
+  density_staged=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || true)
+
+  # ── Gate A: newly added over-length rows in Log/TASKS.md ────────────────────
+  if grep -qxF "Log/TASKS.md" <<< "$density_staged"; then   # here-string: see the SIGPIPE note at gate 1b
+    row_max="${LAB_ROW_LEN_WARN:-200}"
+    [[ "$row_max" =~ ^[1-9][0-9]*$ ]] || row_max=200   # empty/garbage ⇒ default
+    # `+` lines only, minus the +++ file header; strip the leading '+' before measuring.
+    long=$(git diff --cached -U0 -- Log/TASKS.md 2>/dev/null \
+           | grep '^+' | grep -v '^+++ ' | sed 's/^+//' \
+           | LC_ALL=C awk -v max="$row_max" \
+               'length($0) > max && $0 !~ /^[[:space:]]*\|/ { print length($0)": "substr($0,1,70)"…" }' \
+           || true)
+    if [ -n "$long" ]; then
+      n=$(printf '%s\n' "$long" | wc -l | tr -d ' ')
+      echo "density: ⚠ $n newly added row(s) in Log/TASKS.md over ${row_max} bytes:" >&2
+      head -10 <<< "$long" | sed 's/^/    /' >&2
+      [ "$n" -gt 10 ] && echo "    … and $((n - 10)) more." >&2
+      echo "    TASKS.md is a dashboard, not a record — keep the row a pointer and put the detail where detail lives." >&2
+      echo "    Warn-only; existing rows are never flagged (threshold: LAB_ROW_LEN_WARN)." >&2
+    fi
+  fi
+
+  # ── Gate B: wholly-new `## D-` entries in Log/DECISIONS.md over the cap ──────
+  if grep -qxF "Log/DECISIONS.md" <<< "$density_staged"; then
+    ent_kb="${LAB_ENTRY_SIZE_WARN_KB:-8}"
+    [[ "$ent_kb" =~ ^[1-9][0-9]{0,3}$ ]] || ent_kb=8  # empty/garbage/absurd ⇒ default.
+    # The digit bound is load-bearing, not tidiness: unbounded, $((ent_kb * 1024)) wraps
+    # silently — 18014398509481985 yields a cap of 1024 bytes, so every new entry warns.
+    # Bounding the input is cheaper and clearer than clamping the product.
+    # One pass over the raw -U0 diff. A `@@` hunk header ends any accumulation (its LINE
+    # NUMBERS are deliberately never parsed — that was v1's bug farm); an added `^## `
+    # line ends one and may start another. Only a `^## D-` heading opens an entry, so an
+    # edit inside an existing entry never opens one and stays silent. awk always reads to
+    # EOF — no early exit(), which on a large blob returns SIGPIPE.
+    big=$(git diff --cached -U0 -- Log/DECISIONS.md 2>/dev/null \
+          | LC_ALL=C awk -v cap="$((ent_kb * 1024))" '
+              function flush() {
+                if (cur != "" && sz > cap) printf "    %s (%d bytes)\n", substr(cur, 1, 60), sz
+                cur = ""; sz = 0
+              }
+              /^@@/            { flush(); split("", del); seen_hunk = 1; next }
+              !seen_hunk && /^\+\+\+ / { next }
+              /^-/ {
+                # A hunk emits its deletions before its additions, so a `## D-NNN`
+                # heading deleted here marks a RETITLE of an entry that already existed,
+                # not a new one. Without this, renaming one word of an old entry that
+                # lands in the same hunk as a big insert reports the old entry as new.
+                dline = substr($0, 2)
+                if (dline ~ /^## D-/) { split(dline, dp, /[ \t]+/); del[dp[2]] = 1 }
+                next
+              }
+              /^\+/ {
+                line = substr($0, 2)
+                if (line ~ /^## /) {
+                  flush()
+                  if (line ~ /^## D-/) {
+                    split(line, p, /[ \t]+/)
+                    if (!(p[2] in del)) { cur = line; sz = length(line) + 1 }
+                  }
+                  next
+                }
+                if (cur != "") sz += length(line) + 1
+                next
+              }
+              END { flush() }
+            ' || true)
+    if [ -n "$big" ]; then
+      n=$(printf '%s\n' "$big" | wc -l | tr -d ' ')
+      echo "density: ⚠ $n new decision entr(y/ies) in Log/DECISIONS.md over ${ent_kb} KB:" >&2
+      head -10 <<< "$big" >&2
+      [ "$n" -gt 10 ] && echo "    … and $((n - 10)) more." >&2
+      echo "    A decision entry records what was decided and why — the working detail belongs where working detail lives." >&2
+      echo "    Warn-only; only wholly-new entries are measured (threshold: LAB_ENTRY_SIZE_WARN_KB)." >&2
+    fi
+  fi
+) || true
 
 # ── verdict ───────────────────────────────────────────────────────────────────
 if [ "$fails" -gt 0 ]; then

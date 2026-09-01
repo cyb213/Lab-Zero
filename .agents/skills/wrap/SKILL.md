@@ -40,7 +40,7 @@ Update the workspace's tracking files (those listed in `recall.config.json` → 
 - **`Log/PLAN.md`** (if used) — mark tasks done; the full historical record.
 - **`Log/DECISIONS.md`** (if used) — add an entry for any decision made this session.
 
-**De-bloat as you write:** keep tracking rows terse (≤200 chars); detail goes to `Sessions/`, `Log/plans/`, or DECISIONS.md — not into the row. If a row has grown into a paragraph, trim it to a pointer.
+**De-bloat as you write:** keep tracking rows terse (≤200 bytes); detail goes to `Sessions/`, `Log/plans/`, or DECISIONS.md — not into the row. If a row has grown into a paragraph, trim it to a pointer. The pre-commit hook warns — never blocks — on rows a commit newly adds to `Log/TASKS.md`, and on wholly-new `## D-` entries over 8 KB in `Log/DECISIONS.md`.
 
 **Reconcile superseded claims:** if this session executed, shipped, or reversed something an earlier entry recorded as pending / "NOT started", update that PLAN/DECISIONS record in place (or append a dated correction) — tracking must state the session outcome, not the pre-session state.
 
