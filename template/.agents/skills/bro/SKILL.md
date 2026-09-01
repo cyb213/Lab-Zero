@@ -1,7 +1,6 @@
 ---
 name: bro
 description: Re-explain your own previous answer in plain language, for when it didn't land. Use when the user types /bro, or says the last answer was too dense, too jargon-heavy, or asks for it simpler. Re-expresses what was already said; never answers something new.
-disable-model-invocation: true
 ---
 
 <!--

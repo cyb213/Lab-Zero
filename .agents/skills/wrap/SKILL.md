@@ -5,7 +5,7 @@ description: Cleanly wrap a work session — ground state against git+filesystem
 
 # Session Wrap Protocol
 
-Wrap is a sequence of **verified mechanical actions, not a written summary.** Writing a tidy "shipped X, next Y" paragraph fires a false *done* signal while the actual actions stay untouched. Do the actions, verify each one fired, **then** report what fired.
+Wrap is a sequence of **verified mechanical actions, not a written summary.** Writing a tidy "shipped X, next Y" paragraph fires a false *done* signal while the actual actions stay untouched. Do the actions, verify each one fired, **then** report what fired. A written summary may never stand in for the actions. It is allowed only as the Step 9 closer, after every action has fired and been verified.
 
 Run the steps in order. At every step, tracking files are **hypotheses**; `git` + the filesystem are **ground truth**. Never copy a status word ("done"/"shipped"/"deferred") from a tracking row without confirming it against reality first.
 
@@ -93,7 +93,42 @@ git log @{u}..HEAD 2>/dev/null     # empty if pushed (or no upstream)
 ls -la memory/index.db             # mtime newer than your last doc edit, if you reindexed
 ```
 
-Only after the checks pass, report the wrap as a list of **actions that fired** (committed SHA, files touched, tests run, decisions logged, reindex done) — not a narrative. If any check fails, do the action first, then report.
+Only after the checks pass, report the wrap as a list of **actions that fired** (committed SHA, files touched, tests run, decisions logged, reindex done) — not a narrative. If any check fails, do the action first, then report. This step is the list. A narrative belongs only in Step 9, which comes after this list and never replaces it.
+
+## Step 9 — Close with a plain-language TL;DR (3–4 short sentences)
+
+The last thing you output is a **short, plain closer**, written in the `/bro` register. This is a
+**durable, required step** — the wrap is not finished without it.
+
+**Do not write the closer until Step 8's checks have passed.** If a check failed, you are not at
+Step 9 yet — go do the action.
+
+**Do not invoke the `/bro` skill as a tool.** `/bro` re-explains a *previous* message; here you are
+writing fresh. Borrow its register, inlined below so this works whether or not the skill is loaded.
+
+### The rules for this closer
+
+- **3–4 sentences. No headers, no bullets, no tables, no code block.** Just sentences.
+- **Plain language.** No decision IDs, no file paths, no SHAs, no jargon, no counts — unless a number
+  *is* the point. Those all live above it; this is the part that stands on its own.
+- **Casual and direct** — "so basically…", "the short version is…". A touch of personality is the point.
+  If `IDENTITY.md` declares a different register, that wins.
+- **Say the bad news here too.** If something broke, was left undone, or a claim of ours died, it goes
+  in these sentences — not only in the detail above. **Dropping a caveat to make the closer land
+  cleanly is the one failure this step must never produce.**
+- **It must not restate the beats above it.** If it reads as a summary of the summary, cut it and write
+  what actually mattered instead.
+- **No new scope.** State what happened and what it means for the reader; never announce
+  next-session work. *"And next session we'll…"* is the invention **Step 4** forbids.
+- **Never claim an action fired that Step 8 did not confirm.** The closer inherits Step 8's
+  verified list; it adds no outcome of its own.
+- **Answer in the language of the conversation.**
+
+### Why this exists
+
+Steps 0-8 **are** the wrap; this is how you hand it over. The closer is earned by the actions above
+it and never stands in for them. Someone who reads only these sentences and closes the terminal should have the true picture:
+what happened, whether it was good or bad, and what it means for them.
 
 ## What `/wrap` does NOT do
 
@@ -101,6 +136,7 @@ Only after the checks pass, report the wrap as a list of **actions that fired** 
 - Does **not** push if the redaction scan hits (Step 5).
 - Does **not** mark anything "done" that wasn't verified (Step 1).
 - Does **not** bypass the drift gate to "save time."
+- Does **not** skip Step 9, and does **not** let the closer restate the beats above it.
 
 ## When to invoke
 

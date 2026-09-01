@@ -5,7 +5,7 @@ type: feedback
 ---
 Closing a session is a sequence of verified actions: ground state against git, update the tracking files, scan for leaked secrets, commit (and push), reindex recall. Writing a neat "shipped X, next Y" paragraph is NOT a wrap.
 
-**Why:** A tidy summary fires a false "done" signal while the real actions stay untouched. Do the actions, confirm each fired, then report what fired.
+**Why:** A tidy summary fires a false "done" signal while the real actions stay untouched. Do the actions, confirm each fired, then report what fired. A short plain-language closer after that report is fine — it is the hand-off, never a stand-in for the actions.
 
 **How to apply:**
 - Treat tracking files as hypotheses; git and the filesystem are ground truth.

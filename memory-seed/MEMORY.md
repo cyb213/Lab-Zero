@@ -15,4 +15,4 @@
 - [One task per session](habit_one_task_per_session.md) — ship one task, then wrap; don't batch or auto-start the next.
 - [No stale tracking](habit_no_stale_tracking.md) — update STATUS/tracking immediately after each task; zero drift.
 - [Challenge scope before building](habit_scope_challenge_before_building.md) — why this, why now, smallest real slice; phases over monoliths.
-- [Wrap is actions, not a summary](habit_wrap_is_actions_not_summary.md) — verified mechanical actions; a tidy paragraph is not a wrap.
+- [Wrap is actions, not a summary](habit_wrap_is_actions_not_summary.md) — verified mechanical actions; a tidy paragraph is the hand-off, never a stand-in.

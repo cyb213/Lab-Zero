@@ -257,6 +257,26 @@ if [ "${#screened[@]}" -gt 0 ]; then
   fi
 fi
 
+# ── 4. constitution drift (ADVISORY — never blocks) ───────────────────────────
+# D-096. AGENTS.md/CLAUDE.md are deliberately NOT in update.sh's MACHINERY (whole-file
+# extraction would destroy project-owned content), so engine prose inside them can never
+# reach an already-stamped workspace and silently goes stale. This surfaces that.
+#
+# Placed AFTER every gate that feeds $fails, and it never touches $fails — it is a
+# notice, not a gate. Unlike gates 1-3 it cannot be made content-conditional: staleness
+# is a property of a file nobody is editing, so keying it to a staged path would mean it
+# never fires. That is the point, and the cost is ~0.1s per constitution.
+#
+# `|| true` IS LOAD-BEARING, NOT DEFENSIVE HABIT. This hook runs `set -euo pipefail`
+# (line 25): without it, any non-zero from the checker — a bug, a partial update.sh
+# leaving the script absent (rc=127), a non-executable file — would kill the hook, ABORT
+# the user's commit, and skip the verdict block below. The checker also exits 0 by
+# construction; this is the second belt, and the shipped tests assert both independently.
+# Same idiom the redaction pipelines use above, for the same reason.
+if [ -f "$repo_root/scripts/check-constitution-drift.sh" ]; then
+  bash "$repo_root/scripts/check-constitution-drift.sh" "$repo_root" >&2 || true
+fi
+
 # ── verdict ───────────────────────────────────────────────────────────────────
 if [ "$fails" -gt 0 ]; then
   {
