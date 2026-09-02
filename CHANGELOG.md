@@ -4,6 +4,19 @@ All notable changes to Lab Zero. Newest first. Versions follow [semantic version
 
 This file is what `update.sh --check` reads to show you what's new in a release — so each entry is a short, user-facing summary of what changed, not an internal commit log.
 
+## v1.19.1 — 2026-09-02
+
+**Template cleanup — nothing changes for existing projects.**
+
+The project template's "What this is" section carried a leftover instruction telling you to
+write a purpose paragraph that `new-project.sh` had already filled in from your `/kickoff`
+answer. Removed.
+
+- **New projects only.** `AGENTS.md` is part of your personal layer, so `update.sh` never
+  overwrites it — existing workspaces are unaffected and need no action.
+- No machinery, script, or hook changed. Constitution-drift baselines are byte-identical, so
+  no existing project gains a drift warning.
+
 ## v1.19.0 — 2026-09-01
 
 - **Your tracking files now warn you when an entry is growing into a document.** Two advisory checks join the pre-commit hook. The first reads the rows a commit **newly adds** to `Log/TASKS.md` and names any over **200 bytes** — TASKS is a dashboard, and a row that has become a paragraph belongs in `Sessions/`, `Log/plans/` or `DECISIONS.md` instead. The second reads **wholly-new `## D-` entries** in `Log/DECISIONS.md` and names any over **8 KB**. Both are **warn-only and never block**: existing rows and existing entries are never flagged, so neither can turn your backlog into recurring noise, and editing a line inside an entry you already wrote stays silent. Thresholds are `LAB_ROW_LEN_WARN` (default 200) and `LAB_ENTRY_SIZE_WARN_KB` (default 8). Lengths are counted in **bytes under `LC_ALL=C`**, so an em-dash costs 3 — deliberate, because awk implementations disagree about what a "character" is, and a threshold that moves between machines is worse than one that is slightly strict. The whole block is wrapped so a failure inside it **cannot** stop your commit: the worst case is that the advisory silently does not run, and the shipped suite proves it by deliberately breaking the check and asserting the commit still succeeds. **On an existing install:** `update.sh` delivers both, no config change needed. **Two limits worth knowing:** the checks live in `scripts/`, so they reach every project that updates — but the one-line note in `Log/TASKS.md` that documents the row rule is part of your own `Log/`, which no updater ever touches, so it reaches only projects you graduate from now on. And a Lab home that keeps no `Log/TASKS.md` or `Log/DECISIONS.md` — `~/.Lab` itself, by default — is never covered by either check, permanently.

@@ -14,8 +14,6 @@ Shared identity is the vendored copy `@identity/IDENTITY.md` (imported below). I
 ## What this is
 __PURPOSE__
 
-Fill this in: the one-paragraph "what __PROJECT__ is and why it exists." Keep the full intent in [Source/INTENT.md](Source/INTENT.md) and the spec in [Source/SPEC.md](Source/SPEC.md) — this is just the orientation.
-
 ## The genome (read these to pick the project up cold)
 - [Source/INTENT.md](Source/INTENT.md) — why this exists, who it's for, what success looks like.
 - [Source/SPEC.md](Source/SPEC.md) — what it is / does, scope, constraints.
