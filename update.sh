@@ -12,13 +12,14 @@
 #   Machinery (refreshed from upstream): the recall + file-protection engine
 #       (scripts/, .claude/hooks/), ALL shipped work-ceremony skills in BOTH the
 #       canonical .agents/skills/ and the committed .claude/skills/ copies, the
-#       project template/, the engine tests/, new-project.sh, bootstrap.sh,
+#       shipped subagent lanes in .claude/agents/lab-zero/ (that subdirectory ONLY),
+#       the project template/, the engine tests/, new-project.sh, bootstrap.sh,
 #       update.sh, contribute.sh, README.md, PERMISSIONS.md, CHANGELOG.md, VERSION, LICENSE,
 #       .env.example, the memory-seed/, and — merged in, never clobbered — the
 #       .gitignore leak-control lines.
 #   Personal (left alone): IDENTITY.md, AGENTS.md, CLAUDE.md, recall.config.json,
-#       .claude/settings.json, .env, Projects-REGISTRY.md, Log/, Sessions/, and your
-#       agent memory namespace. AGENTS.md / CLAUDE.md are your constitution — yours
+#       .claude/settings.json, your own .claude/agents/* (anything outside lab-zero/),
+#       .env, Projects-REGISTRY.md, Log/, Sessions/, and your agent memory namespace. AGENTS.md / CLAUDE.md are your constitution — yours
 #       to edit; diff them against upstream by hand if you want engine-side wording
 #       updates (see the footer).
 #
@@ -37,10 +38,28 @@
 # planning skill was renamed /plan -> /lab-plan). After the first update that orphan
 # sits with no `.agents/skills/plan` sibling, which the skills-sync gate flags — so
 # clean it by hand: `git rm -r .claude/skills/plan` (see the footer).
+#
+# One run is enough — update.sh is itself machinery, so this run may replace the very
+# file it is executing. When it does, the run re-executes the NEW copy once (same
+# arguments, LAB_ZERO_UPDATE_REEXEC=1 so it can't loop) right after the MACHINERY loop.
+# That second pass picks up any path the new copy added to MACHINERY — before this, a
+# new path landed only on your SECOND run. An update.sh older than this still needs
+# two runs the one time it updates itself to this version.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 UPSTREAM_URL="${LAB_ZERO_UPSTREAM:-https://github.com/cyb213/Lab-Zero.git}"
+
+# ── self-update bookkeeping (captured FIRST, before anything can change) ───────
+# The MACHINERY loop below may replace this very file (update.sh is machinery). So
+# capture now, while the file on disk IS the copy that is running: the original
+# arguments (the parse loop below shifts them away) and a checksum of this file. After
+# the loop, a different checksum means the loop just installed a new update.sh — see
+# the re-exec step there. LAB_ZERO_UPDATE_REEXEC is internal: only that step sets it.
+SELF="$ROOT/$(basename "${BASH_SOURCE[0]}")"
+ORIG_ARGS=("$@")
+self_sum() { if [[ -f "$SELF" ]]; then cksum < "$SELF"; fi; }
+SELF_SUM="$(self_sum)"
 
 # ── args (parse BEFORE any network; --help works even outside a git repo) ──────
 MODE=update          # update | check
@@ -197,6 +216,12 @@ fi
 # a future skill / hook is picked up automatically — no more hand-listing each one
 # (the bug this rewrite fixes). git checkout adds/updates but NEVER deletes, so a
 # renamed/removed path leaves an orphan (see the header + footer).
+#
+# Renaming or withdrawing a shipped lane (a file under .claude/agents/lab-zero/) or any
+# other machinery file therefore leaves the old copy behind — and an orphaned lane keeps
+# loading in every session. The release that renames/withdraws one MUST put the exact
+# `git rm <old path>` line in its CHANGELOG entry (which `update.sh --check` shows);
+# this script will never delete it for you.
 MACHINERY=(
   scripts                 # recall engine, wire-harness, setup-engine, check-skills-sync, git-hooks
   template                # the project genome stamped by new-project.sh
@@ -215,8 +240,15 @@ MACHINERY=(
   .agents/skills          # canonical ceremonies — ALL shipped skills (one dir per skill; whole-dir checkout)
   .claude/skills          # committed Claude Code copies — ALL shipped skills
   .claude/hooks           # file-protection + any Claude hook scripts (recall hooks live under scripts/)
+  .claude/agents/lab-zero # shipped subagent lanes — the SUBDIR only; your own .claude/agents/* stay yours
 )
 
+# The loop AND the re-exec step sit in ONE { … } group on purpose. bash reads a script
+# incrementally, and the loop can replace this file. git checkout writes a fresh file,
+# so bash keeps reading the old one — but a group is parsed whole before any of it runs,
+# so the code that decides whether to re-exec is already in memory however the file got
+# replaced. If update.sh did not change, reading on past the group is safe (same bytes).
+{
 echo "[update] refreshing machinery from $REF…"
 for p in "${MACHINERY[@]}"; do
   if git checkout "$REF" -- "$p" 2>/dev/null; then
@@ -226,6 +258,31 @@ for p in "${MACHINERY[@]}"; do
     had_error=$((had_error+1))
   fi
 done
+
+# ── one-run self-update: re-exec the NEW update.sh once ────────────────────────
+# If the loop just replaced this file, the new copy may name MACHINERY paths this old
+# copy doesn't know about. Hand over to it now, once:
+#   • same arguments, so it resolves the same --ref (or the same latest tag);
+#   • LAB_ZERO_UPDATE_REEXEC=1, so the new copy never re-execs again (no loop);
+#   • --check never gets here (it exits read-only above).
+# What this first pass deliberately leaves to the second: the .gitignore merge, the
+# deps/reindex and the footer. The second pass redoes the whole MACHINERY loop — every
+# path above plus any new one, from the same ref — so its summary and warning count are
+# the authoritative ones. This pass's WARN lines stay on screen above the hand-off line,
+# which repeats their count, so nothing from here is hidden. A hard failure in this pass
+# (set -e) exits before this point with its own non-zero status; after `exec`, the
+# second pass's exit status is the run's exit status.
+# If update.sh is missing or unchanged, nothing happens here and this pass finishes.
+if [[ -z "${LAB_ZERO_UPDATE_REEXEC:-}" ]]; then
+  new_sum="$(self_sum)"
+  if [[ -n "$new_sum" && "$new_sum" != "$SELF_SUM" ]]; then
+    echo "[update] update.sh itself changed — re-running the new copy once to finish"
+    echo "[update]   (this first pass: $had_error warning(s); the second pass redoes every path)"
+    echo
+    LAB_ZERO_UPDATE_REEXEC=1 exec "${BASH:-bash}" "$SELF" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
+  fi
+fi
+}
 
 # .gitignore — APPEND-IF-MISSING, never whole-replace. A plain `git checkout` would
 # overwrite the file and silently drop any ignore lines you added (itself a leak

@@ -15,10 +15,14 @@
 #   --harness claude[,codex]  Harness(es) to wire (default: claude). A `codex` member
 #                           also emits the git-ignored Codex layer at stamp time.
 #   --full                  Also scaffold the optional genome docs (USER-STORIES/INCEPTION/ARCH-OQ)
+#   --seed-from-lab         Also copy your lab's own memory namespace into the project
+#                           (on top of the curated memory-seed/ set; still no-clobber)
 #   --no-venv|--no-seed|--no-reindex|--no-git   Skip that step (testing/manual)
 #
 # Side effects: creates <root>/<slug>/ (its own git repo) and seeds its Claude
-# Code memory namespace at ~/.claude/projects/<derived-key>/memory/.
+# Code memory namespace at ~/.claude/projects/<derived-key>/memory/ with the
+# curated starter habits in memory-seed/ (next to this script). Seeding never
+# overwrites a memory file that already exists there.
 
 set -euo pipefail
 
@@ -31,14 +35,17 @@ if   [[ -f "$LAB/IDENTITY.md" ]];          then IDENTITY="$LAB/IDENTITY.md"
 elif [[ -f "$LAB/identity/IDENTITY.md" ]]; then IDENTITY="$LAB/identity/IDENTITY.md"
 else IDENTITY="$(ls "$LAB"/identity/*.md 2>/dev/null | head -n1 || true)"; fi
 [[ -n "$IDENTITY" ]] || IDENTITY="$LAB/IDENTITY.md"   # missing-file is reported by the check below
-# Seeded memories live in the lab's own CC memory namespace (derived from path).
+# Default seed = the curated starter set shipped next to this script (memory-seed/).
+# The lab's own CC memory namespace (derived from path) is copied only on --seed-from-lab:
+# it holds lab-only memories and facts frozen at stamp time, so it is opt-in.
+SEED_DIR="$LAB/memory-seed"
 LAB_KEY="$(printf '%s' "$LAB" | tr '/._' '-')"
 LAB_NS="$HOME/.claude/projects/$LAB_KEY/memory"
 REGISTRY="$LAB/Projects-REGISTRY.md"
 
 # ── args ──────────────────────────────────────────────────────────────────────
 SLUG=""; NAME=""; PURPOSE="TODO — fill in Source/INTENT.md"; ROOT="$HOME/Projects"
-FULL=0; DO_VENV=1; DO_SEED=1; DO_REINDEX=1; DO_GIT=1; HARNESS_CSV="claude"
+FULL=0; DO_VENV=1; DO_SEED=1; SEED_FROM_LAB=0; DO_REINDEX=1; DO_GIT=1; HARNESS_CSV="claude"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --name) NAME="$2"; shift 2;;
@@ -49,13 +56,14 @@ while [[ $# -gt 0 ]]; do
     --full) FULL=1; shift;;
     --no-venv) DO_VENV=0; shift;;
     --no-seed) DO_SEED=0; shift;;
+    --seed-from-lab) SEED_FROM_LAB=1; shift;;
     --no-reindex) DO_REINDEX=0; shift;;
     --no-git) DO_GIT=0; shift;;
     -*) echo "unknown option: $1" >&2; exit 2;;
     *) [[ -z "$SLUG" ]] && SLUG="$1" || { echo "unexpected arg: $1" >&2; exit 2; }; shift;;
   esac
 done
-[[ -z "$SLUG" ]] && { echo "usage: new-project.sh <slug> [--name ..] [--purpose ..] [--root ..] [--harness claude,codex] [--full]" >&2; exit 2; }
+[[ -z "$SLUG" ]] && { echo "usage: new-project.sh <slug> [--name ..] [--purpose ..] [--root ..] [--harness claude,codex] [--full] [--seed-from-lab]" >&2; exit 2; }
 [[ "$SLUG" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "slug must be lowercase alnum/hyphen: $SLUG" >&2; exit 2; }
 [[ -z "$NAME" ]] && NAME="$SLUG"
 # Desired harness set (default claude). A `codex` member triggers the project's own
@@ -162,14 +170,34 @@ if [[ "$DO_VENV" -eq 1 ]]; then
 fi
 
 # ── seed memory into the project's CC namespace ──────────────────────────────
+# Default: the curated memory-seed/*.md set. --seed-from-lab: also the lab's own
+# namespace. Both are NO-CLOBBER (same loop as scripts/setup-engine.sh): a file that
+# already exists in the target is left untouched, so a re-run never overwrites.
+# seed_from <src-dir> <label> — copy src/*.md into $NS, skipping existing targets.
+seed_from() {
+  local src="$1" label="$2" f base copied=0
+  for f in "$src"/*.md; do
+    [[ -e "$f" ]] || continue
+    base="$(basename "$f")"
+    # ! -L too: a dangling symlink fails -e, and cp would write through it to its target.
+    if [[ ! -e "$NS/$base" && ! -L "$NS/$base" ]]; then cp "$f" "$NS/$base"; copied=$((copied+1)); fi
+  done
+  echo "[new-project]   seeded $copied new memory file(s) from $label → $NS"
+}
 if [[ "$DO_SEED" -eq 1 ]]; then
   KEY="$(printf '%s' "$DEST" | tr '/._' '-')"
   NS="$HOME/.claude/projects/$KEY/memory"
-  if [[ -d "$LAB_NS" ]]; then
-    mkdir -p "$NS"; cp "$LAB_NS"/*.md "$NS"/ 2>/dev/null || true
-    echo "[new-project]   seeded $(ls "$NS"/*.md 2>/dev/null | grep -c . ) memory files → $NS"
+  if [[ -d "$SEED_DIR" ]]; then
+    mkdir -p "$NS"; seed_from "$SEED_DIR" "memory-seed/"
   else
-    echo "[new-project]   WARN: Lab namespace $LAB_NS not found; skipped memory seed" >&2
+    echo "[new-project]   WARN: curated seed dir $SEED_DIR not found; skipped starter-memory seed" >&2
+  fi
+  if [[ "$SEED_FROM_LAB" -eq 1 ]]; then
+    if [[ -d "$LAB_NS" ]]; then
+      mkdir -p "$NS"; seed_from "$LAB_NS" "the lab namespace"
+    else
+      echo "[new-project]   WARN: Lab namespace $LAB_NS not found; skipped --seed-from-lab" >&2
+    fi
   fi
 fi
 

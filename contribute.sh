@@ -55,8 +55,8 @@ git fetch -q upstream
 BR="$(git remote show upstream 2>/dev/null | sed -n 's/.*HEAD branch: //p')"; BR="${BR:-main}"
 
 # ── the contributable set (MACHINERY-only, never a denylist) ───────────────────
-# = update.sh's MACHINERY MINUS memory-seed/.  memory-seed/ is the agent's long-term
-# memory seed — the single likeliest machinery path to accrete PERSONAL lessons/names,
+# = update.sh's MACHINERY MINUS memory-seed/ (and the lanes — see the note below).
+# memory-seed/ is the agent's long-term memory seed — the single likeliest machinery path to accrete PERSONAL lessons/names,
 # and generic prose is exactly what the regex audit below will NOT catch — so a
 # consumer's seed edits are never contributed. CONTRIBUTABLE is therefore a STRICT
 # SUBSET of MACHINERY (a file safe to pull down is the same file safe to push up).
@@ -66,6 +66,10 @@ BR="$(git remote show upstream 2>/dev/null | sed -n 's/.*HEAD branch: //p')"; BR
 #   NOTE (load-bearing): .claude/settings.json is the ONE machinery file bootstrap.sh
 #   substitutes a real /home/<user>/… path into; keeping it OFF this list is what makes
 #   the absolute-home-path safety hold (the abs-path audit class is the backstop).
+#   .claude/agents/lab-zero (the shipped subagent lanes, D-110) is deliberately OFF this
+#   list too: lanes flow DOWN only (factory → release → update.sh), and the rest of
+#   .claude/agents/ is the user's own agents — personal. Never add `.claude/agents` or a
+#   bare `.claude` here (tests/test_contribute_sh.sh guards both).
 # One path per line so the test can awk-extract + subset-check it.
 CONTRIBUTABLE=(
   scripts
@@ -82,12 +86,17 @@ CONTRIBUTABLE=(
   .claude/skills
   .claude/hooks
 )
+# NEVER_UP — pathspec excludes appended to every CONTRIBUTABLE git call. `template` is
+# contributable, but template/.claude/agents/ holds the shipped lanes (flow down only) and
+# any agents the user adds for their own stamps (personal) — both must never flow up
+# (D-110 risk review P3; tests/test_contribute_sh.sh (viii)/(ix)).
+NEVER_UP=(':(exclude)template/.claude/agents')
 
 # ── warn on untracked-new machinery (silently dropped by `git diff` otherwise) ──
 # `git diff <commit> -- <paths>` does NOT include untracked files, so a brand-new
 # machinery file you never `git add`-ed would be omitted from the patch AND un-audited.
 # Detect + warn loudly; never silently drop.
-untracked="$(git ls-files --others --exclude-standard -- "${CONTRIBUTABLE[@]}" 2>/dev/null || true)"
+untracked="$(git ls-files --others --exclude-standard -- "${CONTRIBUTABLE[@]}" "${NEVER_UP[@]}" 2>/dev/null || true)"
 if [[ -n "$untracked" ]]; then
   echo "[contribute] ⚠️  WARNING: these new machinery file(s) are UNTRACKED and are NOT" >&2
   echo "[contribute]     included in the patch (and were NOT audited). \`git add\` them first" >&2
@@ -96,7 +105,7 @@ if [[ -n "$untracked" ]]; then
 fi
 
 # ── extract the candidate patch (committed + modified-tracked machinery) ───────
-patch="$(git diff "upstream/$BR" -- "${CONTRIBUTABLE[@]}")"
+patch="$(git diff "upstream/$BR" -- "${CONTRIBUTABLE[@]}" "${NEVER_UP[@]}")"
 if [[ -z "$patch" ]]; then
   echo "[contribute] nothing to contribute — your machinery matches upstream/$BR."
   echo "[contribute] (Personal-layer + memory-seed changes are never contributed.)"
@@ -230,14 +239,14 @@ echo "[contribute] ✅ leak audit clean (a TRIPWIRE, not a guarantee — see bel
 echo "[contribute]    patch written: $OUTFILE"
 echo
 echo "[contribute] Changed machinery (vs upstream/$BR):"
-git diff --stat "upstream/$BR" -- "${CONTRIBUTABLE[@]}" | sed 's/^/[contribute]   /'
+git diff --stat "upstream/$BR" -- "${CONTRIBUTABLE[@]}" "${NEVER_UP[@]}" | sed 's/^/[contribute]   /'
 echo
 echo "[contribute] Where each file goes in the FACTORY (the patch is flat / consumer-rooted;"
 echo "[contribute] the factory tree is split src/ + assets/, so route each hunk by hand):"
 while IFS= read -r f; do
   [[ -z "$f" ]] && continue
   printf '[contribute]   %-34s ->  %s\n' "$f" "$(factory_home "$f")"
-done < <(git diff --name-only "upstream/$BR" -- "${CONTRIBUTABLE[@]}")
+done < <(git diff --name-only "upstream/$BR" -- "${CONTRIBUTABLE[@]}" "${NEVER_UP[@]}")
 echo
 echo "[contribute] Before you apply this anywhere:"
 echo "[contribute]   1. READ EVERY CHANGED LINE in $OUTFILE — the audit only catches obvious"

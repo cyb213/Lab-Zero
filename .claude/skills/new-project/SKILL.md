@@ -10,7 +10,7 @@ Stamps a self-contained workspace from your lab's `template/` via `new-project.s
 ## Step 0 — Gather the essentials (ask one at a time if missing)
 - **slug** — lowercase, hyphenated (e.g. `my-app`). Becomes the dir + recall `source`.
 - **display name** — human name (e.g. "My App").
-- **one-line purpose** — what it is / why it exists (goes into the registry + CLAUDE.md + INTENT prompt).
+- **one-line purpose** — what it is / why it exists (goes into the registry + the project's `AGENTS.md` constitution + `Log/STATUS.md`).
 - **full genome?** — default is INTENT + SPEC only; pass `--full` to also scaffold USER-STORIES / INCEPTION / ARCHITECTURE-OPEN-QUESTIONS (only when the project clearly warrants them).
 - **harness?** — default is **Claude only**. If the user also wants **Codex** on this project, note it (we pass `--harness claude,codex` in Step 1). Surfaced like `--full`: don't interrogate on a routine graduation — only raise it when Codex actually comes up.
 
@@ -20,9 +20,10 @@ Show the user the exact command and confirm (it creates a new repo + a memory na
 ```bash
 bash new-project.sh <slug> --name "<Display Name>" --purpose "<one-liner>"   # add --full if agreed
 # to also stand the project up for Codex, add:  --harness claude,codex
+# to also copy your lab's own memories into the project, add:  --seed-from-lab
 ```
 
-The script: clean-copies the template; vendors the lab's identity file as `identity/IDENTITY.md`; substitutes placeholders; sets `source=<slug>`; creates `.venv` + installs `sqlite-vec`; seeds the portable memories into the project's CC namespace; `git init` + installs the drift-gate + initial commit; reindexes recall; registers the project in your lab's `Projects-REGISTRY.md`. With `--harness claude,codex` it also dogfoods the new project's own `bootstrap.sh` (after substitution, before the commit) to emit the **git-ignored** Codex layer — recall + identity + ceremonies + apply_patch file-protection — the same layer the Lab itself gets.
+The script: clean-copies the template; vendors the lab's identity file as `identity/IDENTITY.md`; substitutes placeholders; sets `source=<slug>`; creates `.venv` + installs `sqlite-vec`; seeds the curated starter habits (`memory-seed/*.md`, next to the script) into the project's Claude Code memory namespace — never overwriting a file already there (`--seed-from-lab` also copies your lab's own memories, same no-clobber rule; `--no-seed` skips seeding); `git init` + installs the drift-gate + initial commit; reindexes recall; registers the project in your lab's `Projects-REGISTRY.md`. With `--harness claude,codex` it also dogfoods the new project's own `bootstrap.sh` (after substitution, before the commit) to emit the **git-ignored** Codex layer — recall + identity + ceremonies + apply_patch file-protection — the same layer the Lab itself gets.
 
 ## Step 2 — Verify the stamp (don't assume)
 ```bash

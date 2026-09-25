@@ -1,13 +1,13 @@
 ---
 name: lab-plan
-description: Run a structured planning session — interview the sources of truth, draft, adversarial review (up to 3 reviewers, scaled to the change), approve, update docs. Required for any change to the shipped engine, a skill/template, a hook, recall, security, or a public release, and for features spanning several files or systems; a small change touching none of those doesn't need it.
+description: Run a structured planning session — interview the sources of truth, draft, adversarial review (up to 3 reviewers, scaled to the change), approve, update docs. Required for any change to code or config others depend on, a hook, security / auth, user data, or a release, and for features spanning several files or systems; a small self-contained change touching none of those doesn't need it.
 ---
 
 # Planning Session Protocol
 
 You are running a structured planning session. Follow the steps in order, but **scale the ceremony to the change** (see the floor checklist below): a floor-checklist change runs every step in full; a small, self-contained change that touches no floor item may merge or skip steps that don't earn their weight — but never skip the SoT grounding (Step 2), the approval gate (Step 5), the adversarial pass for any floor-checklist change (Step 4), or the tracking updates when DECISIONS/STATUS change (Step 6).
 
-**Floor checklist — run the full ceremony (all 3 adversarial lenses included) whenever the change touches ANY of these:** the shipped engine (`src/`) · a shipped skill / template / assets file · a git-hook · recall scoring or indexing · security / redaction / auth · user data · a public release · or a feature spanning several files or systems. These are objective properties of the diff, not a judgment call about how big the change *feels* — an author who under-rates their own change is the exact failure this pass guards against. Scale down (Step 4) only when every box is unchecked.
+**Floor checklist — run the full ceremony (all 3 adversarial lenses included) whenever the change touches any of these:** code or config others depend on (a published package, a deployed service, a shipped template) · a hook · security / auth · user data · a release · a feature spanning several files or systems. These are objective properties of the diff, not a judgment call about how big the change *feels* — an author who under-rates their own change is the exact failure this pass guards against. Scale down (Step 4) only when every box is unchecked.
 
 ## Arguments
 
@@ -36,7 +36,7 @@ This is an **active interview driven by you**, not a passive file review. For ea
 Sources to check (pick the relevant ones):
 - `Source/INTENT.md` / `Source/SPEC.md` — what the project intends + specifies for this area.
 - Existing implementation — what's already built (grep/glob the codebase).
-- `CLAUDE.md` — constraints and protocols.
+- The project constitution (`AGENTS.md` / `CLAUDE.md`) — constraints and protocols.
 - `Log/DECISIONS.md` — prior decisions that constrain this plan.
 
 ## Step 3: Draft the plan
@@ -56,20 +56,21 @@ After the user approves the draft for review (or immediately if they say "go"):
 
 Run **up to 3** adversarial reviewer passes — feasibility, risk, scope — **scaled to the change, not fixed at 3.** If the change hits the floor checklist above, run all 3 (mandatory). Otherwise scale down: a moderate change runs **risk plus one other** (risk is never the lens you drop — it's the one with the track record for catching the real breakage); a genuinely small change that touches no floor item may run **risk only**, or **none** if you can fully verify it yourself in a few tool calls. Prefer higher reasoning `effort` on fewer, sharper lenses over spawning agents for their own sake — and don't spawn reviewers to double-check work you can verify yourself; reserve the pass for genuinely independent adversarial perspective on a *plan*, not self-review.
 
-Run each pass in parallel where the harness supports subagents, sequentially otherwise — each with a focused, adversarial domain. Tell each to be skeptical and concrete, and to ground every finding in the actual files (read them) — not vibes:
+Run each pass in parallel where the harness supports subagents, sequentially otherwise — each with a focused, adversarial domain. Any fresh-context reviewer works; a read-only reviewer lane (such as `lab-reviewer`) suits this if your setup has one. Tell each to be skeptical and concrete, and to ground every finding in the actual files (read them) — not vibes:
 
 1. **Feasibility** — can each task be built with the available tools, patterns, and dependencies? Are the estimates realistic?
 2. **Risk** — what breaks? Failure modes, data loss, security gaps, regression potential, isolation violations.
 3. **Scope** — does the plan match the problem statement? Flag overengineering, scope creep, and under-scoping.
 
-Each dispatch prompt includes: the plan file path; the relevant `Source/` + `Log/STATUS.md` + `Log/DECISIONS.md` paths; any source files the plan proposes to change (so findings are grounded); and an instruction to return structured findings — area/task, issue, severity (critical/important/minor), suggested fix.
+Each dispatch prompt includes: the plan file path; the relevant `Source/` + `Log/STATUS.md` + `Log/DECISIONS.md` paths; any source files the plan proposes to change (so findings are grounded); and an instruction to report every finding, not only the serious ones — area/task, issue, severity (critical/important/minor), confidence, `file:line`, suggested fix — and, for anything it checked and found sound, where it looked. Filtering happens at consolidation, not in the reviewer.
 
 ### Consolidation
 After the reviewer passes return:
 1. Collect findings into one numbered list.
 2. Categorize: critical (must fix) / important (should fix) / minor.
 3. Apply critical + important fixes to the plan.
-4. Present the consolidated findings and changes to the user.
+4. List every dropped finding with a one-line reason (minor, duplicate, rejected, out of scope).
+5. Present the consolidated findings, the changes, and the dropped list to the user.
 
 ## Step 5: Approval
 

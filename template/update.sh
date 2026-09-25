@@ -13,11 +13,12 @@
 #   Machinery (refreshed from upstream): the recall + file-protection engine
 #       (scripts/, .claude/hooks/), ALL shipped work-ceremony skills in BOTH the
 #       canonical .agents/skills/ and the committed .claude/skills/ copies, the
+#       shipped subagent lanes in .claude/agents/lab-zero/ (that subdirectory ONLY), the
 #       engine tests/, bootstrap.sh, update.sh, the .agents/VERSION stamp, and —
 #       merged in, never clobbered — the .gitignore leak-control lines.
 #   Personal (left alone): AGENTS.md, CLAUDE.md, identity/, recall.config.json,
-#       .claude/settings.json, .env, Log/, Sessions/, Source/, Reviews/, and your
-#       agent memory namespace. AGENTS.md / CLAUDE.md are your constitution — yours
+#       .claude/settings.json, your own .claude/agents/* (anything outside lab-zero/),
+#       .env, Log/, Sessions/, Source/, Reviews/, and your agent memory namespace. AGENTS.md / CLAUDE.md are your constitution — yours
 #       to edit; diff them against upstream by hand if you want engine-side wording
 #       updates (see the footer).
 #
@@ -53,11 +54,30 @@
 # project root, because a stamped project IS that subtree flattened. Don't "simplify"
 # it to a plain `git checkout` — that would create a literal template/ directory
 # inside your project.
+#
+# One run is enough — update.sh is itself machinery, so this run may replace the very
+# file it is executing. When it does, the run re-executes the NEW copy once (same
+# arguments, LAB_ZERO_UPDATE_REEXEC=1 so it can't loop) right after the MACHINERY loop.
+# That second pass picks up any path the new copy added to MACHINERY — before this, a
+# new path landed only on your SECOND run. An update.sh older than this still needs
+# two runs the one time it updates itself to this version.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 UPSTREAM_URL="${LAB_ZERO_UPSTREAM:-https://github.com/cyb213/Lab-Zero.git}"
 VERSION_FILE=".agents/VERSION"
+
+# ── self-update bookkeeping (captured FIRST, before anything can change) ───────
+# The MACHINERY loop below may replace this very file (update.sh is machinery). So
+# capture now, while the file on disk IS the copy that is running: the original
+# arguments (the parse loop below shifts them away) and a checksum of this file. After
+# the loop, a different checksum means the loop just installed a new update.sh — see
+# the re-exec step there. LAB_ZERO_UPDATE_REEXEC and LAB_ZERO_UPDATE_PASS1_PATHS are
+# internal: only that step sets them.
+SELF="$ROOT/$(basename "${BASH_SOURCE[0]}")"
+ORIG_ARGS=("$@")
+self_sum() { if [[ -f "$SELF" ]]; then cksum < "$SELF"; fi; }
+SELF_SUM="$(self_sum)"
 
 # ── args (parse BEFORE any network; --help works even outside a git repo) ──────
 MODE=update          # update | check
@@ -225,6 +245,12 @@ SRC=FETCH_HEAD
 # Whole DIRECTORIES wherever possible so a future skill / hook is picked up
 # automatically. Extracting adds/updates but NEVER deletes, so a renamed/removed path
 # leaves an orphan (see the header + footer).
+#
+# Renaming or withdrawing a shipped lane (a file under .claude/agents/lab-zero/) or any
+# other machinery file therefore leaves the old copy behind — and an orphaned lane keeps
+# loading in every session. The release that renames/withdraws one MUST put the exact
+# `git rm <old path>` line in its CHANGELOG entry (which `update.sh --check` shows);
+# this script will never delete it for you.
 MACHINERY=(
   scripts                 # recall engine, wire-harness, setup-engine, check-skills-sync, git-hooks
   tests                   # engine tests
@@ -234,14 +260,29 @@ MACHINERY=(
   .agents/VERSION         # release-stamped engine version (so this project knows what it runs)
   .claude/skills          # committed Claude Code copies — ALL shipped skills
   .claude/hooks           # file-protection hooks (recall hooks live under scripts/)
+  .claude/agents/lab-zero # shipped subagent lanes — the SUBDIR only; your own .claude/agents/* stay yours
 )
 
 # ── dirty-machinery warning (D8) ───────────────────────────────────────────────
 # We are about to overwrite these paths. Warn loudly if you have uncommitted work in
 # them, but don't block — git recovers anything committed, and blocking can wedge you
 # mid-task with no obvious way forward.
-if git rev-parse --verify -q HEAD >/dev/null 2>&1; then
-  dirty="$(git status --porcelain -- "${MACHINERY[@]}" 2>/dev/null || true)"
+#
+# In the re-exec'd second pass (see the one-run self-update step below), skip every
+# path the first pass already refreshed. tar leaves its writes UNSTAGED, so they look
+# like uncommitted edits here — warning about them would be a false alarm, and any real
+# edit of yours under those paths was already warned about (and overwritten) by the
+# first pass. Paths NEW to this copy's MACHINERY are still checked: the first pass never
+# touched them, so dirt there is genuinely yours.
+warn_paths=()
+for p in "${MACHINERY[@]}"; do
+  if [[ -n "${LAB_ZERO_UPDATE_REEXEC:-}" ]]; then
+    case " ${LAB_ZERO_UPDATE_PASS1_PATHS:-} " in *" $p "*) continue ;; esac
+  fi
+  warn_paths+=("$p")
+done
+if [[ "${#warn_paths[@]}" -gt 0 ]] && git rev-parse --verify -q HEAD >/dev/null 2>&1; then
+  dirty="$(git status --porcelain -- "${warn_paths[@]}" 2>/dev/null || true)"
   if [[ -n "$dirty" ]]; then
     echo "[update] ⚠️  WARNING: you have uncommitted changes under machinery paths." >&2
     printf '%s\n' "$dirty" | sed 's/^/[update]     /' >&2
@@ -252,6 +293,14 @@ if git rev-parse --verify -q HEAD >/dev/null 2>&1; then
   fi
 fi
 
+# The loop AND the re-exec step sit in ONE { … } group on purpose. bash reads a script
+# incrementally, and the loop can replace this file. GNU tar unlinks before it writes,
+# so bash keeps reading the old file — but some tar implementations rewrite an existing
+# file in place, which would hand bash the NEW bytes at the OLD offset. A group is
+# parsed whole before any of it runs, so the code that decides whether to re-exec is
+# already in memory either way. If update.sh did not change, reading on past the group
+# is safe (same bytes).
+{
 echo "[update] refreshing machinery from $REF…"
 # ONE `git archive` PER PATH, never a batch. A single archive naming several paths
 # fails WHOLESALE if ANY one of them is missing at $SRC — non-zero, and NO output at
@@ -272,6 +321,34 @@ for p in "${MACHINERY[@]}"; do
     had_error=$((had_error+1))
   fi
 done
+
+# ── one-run self-update: re-exec the NEW update.sh once ────────────────────────
+# If the loop just replaced this file, the new copy may name MACHINERY paths this old
+# copy doesn't know about. Hand over to it now, once:
+#   • same arguments, so it resolves the same --ref (or the same latest tag);
+#   • LAB_ZERO_UPDATE_REEXEC=1, so the new copy never re-execs again (no loop);
+#   • LAB_ZERO_UPDATE_PASS1_PATHS = this pass's whole MACHINERY list (attempted, not only succeeded), so the new copy's
+#     dirty-machinery warning skips this pass's own unstaged writes (see D8 above);
+#   • --check never gets here (it exits read-only above).
+# What this first pass deliberately leaves to the second: the .gitignore merge, the
+# deps/reindex and the footer. The second pass redoes the whole MACHINERY loop — every
+# path above plus any new one, from the same ref — so its summary and warning count are
+# the authoritative ones. This pass's WARN lines stay on screen above the hand-off line,
+# which repeats their count, so nothing from here is hidden. A hard failure in this pass
+# (set -e) exits before this point with its own non-zero status; after `exec`, the
+# second pass's exit status is the run's exit status.
+# If update.sh is missing or unchanged, nothing happens here and this pass finishes.
+if [[ -z "${LAB_ZERO_UPDATE_REEXEC:-}" ]]; then
+  new_sum="$(self_sum)"
+  if [[ -n "$new_sum" && "$new_sum" != "$SELF_SUM" ]]; then
+    echo "[update] update.sh itself changed — re-running the new copy once to finish"
+    echo "[update]   (this first pass: $had_error warning(s); the second pass redoes every path)"
+    echo
+    LAB_ZERO_UPDATE_REEXEC=1 LAB_ZERO_UPDATE_PASS1_PATHS="${MACHINERY[*]}" \
+      exec "${BASH:-bash}" "$SELF" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
+  fi
+fi
+}
 
 # .gitignore — APPEND-IF-MISSING, never whole-replace. A plain extract would overwrite
 # the file and silently drop any ignore lines you added (itself a leak vector). Instead

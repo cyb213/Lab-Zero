@@ -1,6 +1,6 @@
 # Memory index
 
-> Your agent's long-term memory — one file per durable lesson, one line per memory here. This is a curated starter set of universal work habits. Add your own as you work (or let the agent add them when you correct it); keep this index in sync. These are seeded into your Claude Code memory namespace by `bootstrap.sh` and surfaced by recall.
+> Your agent's long-term memory — one file per durable lesson, one line per memory here. This is a curated starter set of universal work habits. Add your own as you work (or let the agent add them when you correct it); keep this index in sync. These are seeded into your Claude Code memory namespace by `bootstrap.sh`, and into each new project's namespace by `new-project.sh` (never overwriting a file already there), and surfaced by recall.
 
 - [Truth over reassurance](habit_truth_over_reassurance.md) — honest truth and trust, never a yes-man, even when it contradicts you.
 - [One question at a time](habit_one_question_at_a_time.md) — ask sequentially, never batch; one action-step at a time.

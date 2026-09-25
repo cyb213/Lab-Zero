@@ -57,7 +57,7 @@ defence against false-positive noise — apply it strictly; a near-miss is a SKI
    mistakes. If it's fast and safe by hand, it's not worth formalizing → SKIP.
 
 If a candidate fails any gate, it does **not** go in the doc as a candidate (record it as
-SKIP only if it's a near-miss a reader would otherwise wonder about — see scope discipline).
+SKIP only if it's a near-miss a reader would otherwise wonder about; other gate failures are not candidates and need no entry).
 
 ## Method — per candidate
 
@@ -72,6 +72,7 @@ For every candidate that clears the bar:
 3. **Already-ruled?** Derive the candidate's **stable slug** (see below) and grep **every**
    prior `Reviews/*skill-discovery*.md` for that slug. If a prior sweep already ruled it
    (SKIP/SURFACE/DOCUMENT, or it's since been built), do **not** re-propose it.
+   `DEFERRED` is not a ruling: a deferred slug is evaluated again as a fresh candidate.
 4. **Verdict** — assign exactly one from the ladder below, with its terminal action.
 
 ## Verdict ladder
@@ -91,6 +92,8 @@ auto-build:
   re-surfacing it and proves the bar was applied.
 - **SURFACE** — genuinely ambiguous, or a call the user owns (worth formalizing? which
   shape?). List it for the user; do not pick for them.
+- **DEFERRED** — cleared the bar but ranked below this pass's short view (see scope
+  discipline). Not a ruling; the next sweep evaluates it again.
 
 When torn between CODIFY and SKIP, prefer **SURFACE** — let the user rule. Never inflate a
 weak pattern into a build recommendation.
@@ -127,7 +130,7 @@ date. This skeleton is the `/audit` shape — same mechanical-evidence + scope d
 |---|---|---|---|
 | <short name> | `<slug>` | ×N | CODIFY-AS-SKILL / -SCRIPT / DOCUMENT / SKIP / SURFACE |
 
-**Headline:** <1-2 sentences: the strongest candidate, or "no new candidates" if none>
+**Headline:** <1-2 sentences: the strongest candidate, or "no new candidates — checked <corpus, skills/scripts, prior sweeps>" if none>
 
 ---
 
@@ -141,6 +144,10 @@ date. This skeleton is the `/audit` shape — same mechanical-evidence + scope d
 - **Already-formalized?** <grep result: "no script/skill covers it" or "covered by X → SKIP">
 - **Why this verdict:** <one line>
 - **Terminal action:** <run `/lab-plan <slug>` | write `scripts/<slug>.sh` | runbook | recorded>
+
+## Not in the short view
+
+- `<slug>` — DEFERRED: <one-line reason, e.g. ranked 8th; weaker recurrence than C1–C6>
 ```
 
 ## Two-pass model
@@ -163,12 +170,17 @@ runtime free of any build/release machinery.
 - Mining command transcripts — out of scope for v1.
 - Inflating count by listing the same session/commit twice.
 
-## Scope discipline (low-noise enforcement)
+## Scope discipline (report all, filter later)
 
-- **0 candidates is a valid, good result.** Write a one-line "no new candidates this sweep"
-  and stop. Do not manufacture noise to justify the run.
-- **Per-pass cap ~6 candidates.** If you find more, present the strongest 6 and say a
-  follow-up sweep is warranted. A flood of candidates means the bar wasn't applied.
+1. **Inventory everything that clears the bar.** Don't cap the count while you sweep. A
+   flood of candidates usually means the bar wasn't applied — recheck the gates, not the count.
+2. **Then rank for the short view.** The TL;DR and your report show the strongest ~6.
+   Record each one past that as `DEFERRED`; in `Not in the short view`, list every dropped
+   item with a one-line reason. Nothing that clears the bar is omitted silently.
+
+- **0 candidates is a valid, good result.** Write a one-line "no new candidates this sweep",
+  name what you checked (corpus range, skills/scripts subtracted, prior sweeps read), and
+  stop. Do not manufacture noise to justify the run.
 - The false-positive tax is what kills a discovery sweep — bias toward SKIP/SURFACE.
 
 ## When to invoke
