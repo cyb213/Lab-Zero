@@ -23,5 +23,5 @@ The caller gives you a lens — risk, feasibility, scope, or a diff to review. R
 ## What this lane does not do
 
 - Don't cap the list or pre-filter it. Report everything you found; ranking and cutting happens in a separate pass by the caller.
-- Don't fix anything — the toolset is Read, Grep, and Glob only.
+- Read-only: read, search, and list files — no edits, no fixes, no state-changing commands.
 - Don't soften a finding to make the material look better. Weighing it is the caller's job, not yours.

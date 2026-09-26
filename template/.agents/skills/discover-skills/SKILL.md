@@ -1,7 +1,6 @@
 ---
 name: discover-skills
-description: Periodic sweep of the workspace's curated narrative (session-note titles + git subjects + roadmap/DECISIONS) to surface repeated, formalizable work and propose turning it into skills or scripts. Writes one Reviews/ doc with a verdict per candidate. NOT correction triage (that's /review-corrections) and NOT drift detection (that's /audit) — this finds un-formalized recurring WORK.
-disable-model-invocation: true
+description: Periodic sweep of the workspace's curated narrative (session-note titles + git subjects + roadmap/DECISIONS) to surface repeated, formalizable work and propose turning it into skills or scripts. Writes one Reviews/ doc with a verdict per candidate. Not correction triage (that's /review-corrections) and not drift detection (that's /audit) — this finds un-formalized recurring work.
 ---
 
 # Discover Skills
@@ -42,7 +41,7 @@ in a mature workspace that signal is dominated by inspection/commit noise and mo
 re-derives scripts that already exist. *(Future: transcript command-mining pays off more
 in a young workspace, before scripts exist — not implemented here.)*
 
-## Worthiness bar — a candidate MUST clear ALL of these
+## Worthiness bar — a candidate clears every one of these
 
 A work-shape is a candidate only if it passes every numbered gate. This bar is the
 defence against false-positive noise — apply it strictly; a near-miss is a SKIP.
@@ -161,7 +160,7 @@ the user initiates writing `scripts/<slug>.sh`. This skill's job ends at the rec
 — that keeps every new skill behind the `/lab-plan` adversarial gate and this ceremony's
 runtime free of any build/release machinery.
 
-## Anti-patterns (must NOT produce)
+## Anti-patterns (don't produce these)
 
 - A candidate without a recurrence count + citations (≥ N) — vibes are out of scope.
 - A candidate that's already a skill/script, proposed as new (you skipped the grep).

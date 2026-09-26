@@ -1,7 +1,6 @@
 ---
 name: audit
 description: Drift audit for tracking files, specs, plans, or citations against live state. Produces one Reviews/ doc with mechanically-verified findings, two-pass (inventory then apply).
-disable-model-invocation: true
 ---
 
 # Drift Audit Protocol

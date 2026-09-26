@@ -1,7 +1,6 @@
 ---
 name: review-corrections
 description: Triage pending correction candidates (captured by the recall Stop hook) into memory — promote the worthy, drop the noise, surface the contested. Closes the correction→memory loop.
-disable-model-invocation: true
 ---
 
 # Review Corrections

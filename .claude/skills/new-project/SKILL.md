@@ -23,7 +23,7 @@ bash new-project.sh <slug> --name "<Display Name>" --purpose "<one-liner>"   # a
 # to also copy your lab's own memories into the project, add:  --seed-from-lab
 ```
 
-The script: clean-copies the template; vendors the lab's identity file as `identity/IDENTITY.md`; substitutes placeholders; sets `source=<slug>`; creates `.venv` + installs `sqlite-vec`; seeds the curated starter habits (`memory-seed/*.md`, next to the script) into the project's Claude Code memory namespace — never overwriting a file already there (`--seed-from-lab` also copies your lab's own memories, same no-clobber rule; `--no-seed` skips seeding); `git init` + installs the drift-gate + initial commit; reindexes recall; registers the project in your lab's `Projects-REGISTRY.md`. With `--harness claude,codex` it also dogfoods the new project's own `bootstrap.sh` (after substitution, before the commit) to emit the **git-ignored** Codex layer — recall + identity + ceremonies + apply_patch file-protection — the same layer the Lab itself gets.
+The script: clean-copies the template; vendors the lab's identity file as `identity/IDENTITY.md`; substitutes placeholders; sets `source=<slug>`; creates `.venv` + installs `sqlite-vec`; seeds the curated starter habits (`memory-seed/*.md`, next to the script) into the project's Claude Code memory namespace — never overwriting a file already there (`--seed-from-lab` also copies your lab's own memories, same no-clobber rule; `--no-seed` skips seeding); `git init` + installs the drift-gate + initial commit; reindexes recall; registers the project in your lab's `Projects-REGISTRY.md`. With `--harness claude,codex` it also dogfoods the new project's own `bootstrap.sh` (after substitution, before the commit) to emit the **git-ignored** Codex layer — recall + identity + ceremonies + apply_patch file-protection + the `lab-reader`/`lab-reviewer` helper agents — the same layer the Lab itself gets.
 
 ## Step 2 — Verify the stamp (don't assume)
 ```bash
@@ -37,7 +37,7 @@ grep -n "<slug>" Projects-REGISTRY.md                                         # 
 
 **If you stamped `--harness claude,codex`,** also confirm the Codex layer wired (it's generated + git-ignored, so it won't show in `git status`):
 ```bash
-ls "$DEST"/{.codex/hooks.json,.lab/harnesses}   # Codex hooks wired + harness state recorded
+ls "$DEST"/{.codex/hooks.json,.codex/agents/lab-reader.toml,.codex/agents/lab-reviewer.toml,.lab/harnesses}   # Codex hooks + helper agents wired, harness state recorded
 ```
 Then tell the user about the **one-time `/hooks` trust**: Codex ignores a project's hooks until you trust them — in an interactive Codex session *inside the project*, approve them in the `/hooks` review; recall + the `apply_patch` file-protection hook fire from then on, not before. Don't claim the Codex hooks are working until that trust step is done.
 

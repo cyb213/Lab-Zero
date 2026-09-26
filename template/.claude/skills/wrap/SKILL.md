@@ -44,17 +44,17 @@ Update the workspace's tracking files (those listed in `recall.config.json` → 
 
 **Reconcile superseded claims:** if this session executed, shipped, or reversed something an earlier entry recorded as pending / "NOT started", update that PLAN/DECISIONS record in place (or append a dated correction) — tracking must state the session outcome, not the pre-session state.
 
-**Drift gate:** every configured tracking file MUST contain the literal `session N` (no zero-padding) before the session-note commit will pass the pre-commit hook.
+**Drift gate:** every configured tracking file needs the literal `session N` (no zero-padding). Where the pre-commit drift hook is installed, it blocks the session-note commit without it.
 
 ## Step 3 — Session note
 
 Ensure `Sessions/YYYY-MM-DD_NNN_<slug>.md` exists. It must carry the final state, not an "I'll come back to this" stub. If the note has a verification block, fill every field (`n/a — <reason>` if it doesn't apply) — the act of filling it IS the spot-check.
 
-## Step 4 — Next-session landing pad (ground it — do NOT declare it)
+## Step 4 — Next-session landing pad (ground it — don't declare it)
 
 Confirm the next session can pick up cleanly: tracking WIP / Next Up rows are **coherent and grounded against reality**, and any in-progress `Log/plans/*.md` has an accurate `Status:` field. That is the whole job here.
 
-**Do NOT** author new scope, list "next session we should…", or announce what comes next — that presumes the user's priorities. Document state — done / blocked / decisions-needed — and let the user choose the next move.
+**Don't** author new scope, list "next session we should…", or announce what comes next — that presumes the user's priorities. Document state — done / blocked / decisions-needed — and let the user choose the next move.
 
 ## Step 5 — Redaction scan (before any push)
 

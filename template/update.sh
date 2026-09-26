@@ -401,6 +401,15 @@ echo "[update] Personal files are NOT auto-updated. CLAUDE.md, AGENTS.md,"
 echo "[update] identity/ and recall.config.json are yours. To see upstream's current"
 echo "[update] wording for the constitution, read it directly:"
 echo "[update]    git show $SRC:template/AGENTS.md | less"
-echo "[update] If you drive this project on Codex, re-run the harness wiring — the"
-echo "[update] generated .codex/ layer is git-ignored and does NOT refresh here:"
-echo "[update]    bash bootstrap.sh --harness codex"
+# Codex re-wire hint (D-111): the generated .codex/ layer (hooks, identity override,
+# helper agents) is git-ignored and never refreshed here. Print the exact re-wire line
+# only when .lab/harnesses names codex — exact-line matches only, so a stray line can't
+# reach the command; absolute + shell-quoted path; the recorded set, so a claude,codex
+# workspace isn't narrowed to codex-only.
+lz_harness() { grep -qx "$1" "$ROOT/.lab/harnesses" 2>/dev/null; }
+if lz_harness codex; then
+  lz_set="codex"; lz_harness claude && lz_set="claude,codex"
+  echo "[update] Codex: the generated .codex/ layer (hooks + helper agents) is git-ignored"
+  echo "[update] and does NOT refresh here. Re-wire it (wiring only, no reinstall):"
+  echo "[update]    LAB_BOOTSTRAP_SKIP_ENGINE=1 bash $(printf %q "$ROOT/bootstrap.sh") --harness $lz_set"
+fi

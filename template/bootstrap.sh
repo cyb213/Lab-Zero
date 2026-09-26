@@ -104,6 +104,8 @@ if [[ "$WANT_CODEX" -eq 1 ]]; then
   echo "[bootstrap]      • recall (SessionStart/UserPromptSubmit/Stop) — injects your memory + context;"
   echo "[bootstrap]      • file-protection (PreToolUse) — blocks apply_patch edits to .env / recall.config.json."
   echo "[bootstrap]        Until you approve it, that protection is OFF — even if you trusted recall earlier."
+  echo "[bootstrap]    The helper agents (.codex/agents/: lab-reader, lab-reviewer) need no /hooks step,"
+  echo "[bootstrap]    but they too load only once the project is trusted."
   echo "[bootstrap]    • In an interactive Codex session here, approve the project's hooks (the /hooks review)."
   echo "[bootstrap]    • Headless/CI: hook-trust bypass is version-dependent and may not exist in your Codex"
   echo "[bootstrap]      (e.g. 0.130.0 has no bypass flag) — the one-time interactive approval is the reliable path."

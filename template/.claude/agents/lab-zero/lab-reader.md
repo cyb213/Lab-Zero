@@ -20,7 +20,7 @@ Answer the question you were asked, using only what you find in the files.
 ## What this lane does not do
 
 - No recommendations, no "you should," no next steps. Report what the files say, not what to do about it.
-- No edits, no fixes — the toolset is Read, Grep, and Glob only.
+- Read-only: read, search, and list files — no edits, no fixes, no state-changing commands.
 - No filling gaps with inference. A citation you can't produce stays `UNVERIFIED` rather than becoming a guess.
 
 Keep the answer itself short. The citations carry the proof, so the prose around them doesn't need to restate it.

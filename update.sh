@@ -331,3 +331,15 @@ echo "[update] One rename to apply by hand on a pre-2A Lab: the planning skill w
 echo "[update] renamed /plan -> /lab-plan. Update any '/plan' mention in your"
 echo "[update] AGENTS.md / CLAUDE.md, and remove the stale orphan dir:"
 echo "[update]    git rm -r .claude/skills/plan"
+# Codex re-wire hint (D-111): the generated .codex/ layer (hooks, identity override,
+# helper agents) is git-ignored and never refreshed here. Print the exact re-wire line
+# only when .lab/harnesses names codex — exact-line matches only, so a stray line can't
+# reach the command; absolute + shell-quoted path; the recorded set, so a claude,codex
+# workspace isn't narrowed to codex-only.
+lz_harness() { grep -qx "$1" "$ROOT/.lab/harnesses" 2>/dev/null; }
+if lz_harness codex; then
+  lz_set="codex"; lz_harness claude && lz_set="claude,codex"
+  echo "[update] Codex: the generated .codex/ layer (hooks + helper agents) is git-ignored"
+  echo "[update] and does NOT refresh here. Re-wire it (wiring only, no reinstall):"
+  echo "[update]    LAB_BOOTSTRAP_SKIP_ENGINE=1 bash $(printf %q "$ROOT/bootstrap.sh") --harness $lz_set"
+fi
