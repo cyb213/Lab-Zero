@@ -29,8 +29,9 @@ say so and stop. (`bash scripts/recall.sh misses` with no flag gives a human-rea
 Read each `last_user` and decide:
 
 - **PROMOTE** — a real, durable lesson: a correction of a mistake worth not repeating, or a
-  standing preference ("from now on…", "I prefer…", "always/never…"). Distill it into a crisp,
-  general rule — the *lesson*, not the verbatim complaint.
+  standing preference ("from now on…", "I prefer…", "always/never…"). Distill it into the rule,
+  when it applies, and why — the *lesson*, not the verbatim complaint. Prefer a scoped rule
+  over a bare always/never.
 - **DROP** — noise the detector over-caught: praise ("nice", "good job"), a bare "stop"/"don't"
   with no durable content, a one-off that won't recur, or something already in memory. Do
   nothing — advancing the high-water-mark (step 4) excludes it from future reviews.
@@ -68,7 +69,7 @@ write inside THIS workspace's own namespace (the isolation rule):
 
   ```
   ## <ISO-ts> — <short lesson title>
-  <the distilled lesson, in plain language>
+  <the rule, when it applies, and why — in plain language>
   Source: correction at <ts>
   ```
 
@@ -112,7 +113,7 @@ Pending (`bash scripts/recall.sh misses --json`):
 
 Decisions:
 
-1. **PROMOTE** — durable unit preference → "Always use Celsius; never convert to Fahrenheit."
+1. **PROMOTE** — durable unit preference → "Give temperatures in Celsius — the user's stated preference; convert only if they ask."
 2. **DROP** — praise, no lesson.
 3. **PROMOTE** — standing process rule → "Run the test suite and confirm it's green before reporting a task done."
 4. **SURFACE** — tentative ("maybe?"); the user's call.

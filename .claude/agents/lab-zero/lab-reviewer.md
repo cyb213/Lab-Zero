@@ -2,7 +2,7 @@
 name: lab-reviewer
 description: Use for an adversarial pass on a plan or a diff — the caller names a lens (risk, feasibility, scope, or a specific diff to review) and this lane looks for what's wrong with it from that angle. Reports every finding it has, proven and suspected alike; the caller ranks and filters afterward. Not for re-checking your own work — an independent review only earns its keep on someone else's output, not a pass over what you just wrote yourself.
 model: opus
-effort: high
+effort: medium
 tools: Read, Grep, Glob
 ---
 

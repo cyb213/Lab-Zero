@@ -4,6 +4,30 @@ All notable changes to Lab Zero. Newest first. Versions follow [semantic version
 
 This file is what `update.sh --check` reads to show you what's new in a release — so each entry is a short, user-facing summary of what changed, not an internal commit log.
 
+## v1.22.0 — 2026-11-27
+
+**Updating to this release:** one `bash update.sh` run is enough. It refreshes the helper agent and `/review-corrections`. Two lines in your own `AGENTS.md` also changed, and the updater never edits that file. See **Your AGENTS.md** below to copy them across.
+
+- **`lab-reviewer` now runs at `medium` effort, not `high`** (Claude Code only). Anthropic's guidance for Opus 5.5 is that `medium` matches or beats the previous Opus at `high`, and `high` had never been measured against it. On Codex nothing changes: the generated helpers pin no effort and inherit your session's.
+- **The communication rule no longer sets a sentence-length number.** "Keep sentences short — one idea each, rarely past about 25 words." is now "Write short, full sentences, one idea each. Use flowing prose where ideas connect, and bullets for separate items." Current models follow style limits closely, and a word cap tends to make their prose choppy. The rest of the block is unchanged.
+- **Test-first now reads as this workspace's requirement, not a suggestion.** Some current models skip new tests unless the repo requires them. The scope is the same as before: only where behavior is checkable.
+- **`/review-corrections` writes scoped memories.** It now distills a correction into the rule, when it applies, and why, instead of a bare "always/never". Its worked example changed to match. Memories you already have are untouched.
+- **New installs only: the starter TDD memory matches the new wording.** It drops "lean" and keeps the exception for throwaway spikes and pure exploration, now stated as the rule's scope. Existing memory is never re-seeded.
+
+**Your AGENTS.md.** After updating, the drift check names the lines that changed. Replace each one exactly:
+
+- **In your Lab and in every project** — the communication block:
+  - old: `Keep sentences short — one idea each, rarely past about 25 words.`
+  - new: `Write short, full sentences, one idea each. Use flowing prose where ideas connect, and bullets for separate items.`
+- **In each project** — the test-first line:
+  - old: `**lean test-first** (TDD) wherever behavior is checkable — a failing-then-passing test is the proof, not eyeballing.`
+  - new: `**test-first is required here** (TDD) wherever behavior is checkable — write the failing test before the code; a failing-then-passing test is the proof, not eyeballing.`
+- **In your Lab** — the test-first line:
+  - old: `**Lean test-first** where behavior is checkable.`
+  - new: `**Test-first is required here** where behavior is checkable — write the failing test before the code.`
+
+Your Lab's `template/AGENTS.md`, which new projects are stamped from, refreshes itself with `update.sh`. **If you use Codex, re-run the harness wiring after you edit `AGENTS.md`**, not before. Codex reads `AGENTS.override.md`, a copy of `AGENTS.md` made at wiring time, so it keeps the old lines until you re-wire: `LAB_BOOTSTRAP_SKIP_ENGINE=1 bash <your workspace>/bootstrap.sh --harness <your harness set>`.
+
 ## v1.21.0 — 2026-09-26
 
 **Updating to this release:** from v1.20.0, one `bash update.sh` run is enough. From an older version, follow the v1.20.0 note below (two runs), because your current updater predates the one-run fix. If you use Codex, re-run the harness wiring afterwards — from this release on, the updater prints the exact line (see below).

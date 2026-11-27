@@ -6,7 +6,7 @@
 - [One question at a time](habit_one_question_at_a_time.md) — ask sequentially, never batch; one action-step at a time.
 - [Ask at decision points](habit_ask_at_decision_points.md) — at a real fork, recommend + ask; decide execution details yourself.
 - [Verify before done](habit_verify_before_done.md) — "done" = checked/ran/confirmed; action ≠ result.
-- [Tests prove it (TDD)](habit_tdd.md) — lean test-first; a failing-then-passing test is the proof, not eyeballing.
+- [Tests prove it (TDD)](habit_tdd.md) — test-first is required where behavior is checkable; a failing-then-passing test is the proof, not eyeballing.
 - [Progressive notes](habit_progressive_notes.md) — write session notes as you work, not only at the end.
 - [Diagnose before patching](habit_diagnose_before_patching.md) — root-cause hypothesis + minimal test before fixing; no panic-fixing.
 - [Read before planning](habit_read_before_planning.md) — ground plans in the real source; the existing system is the spec.
