@@ -22,9 +22,9 @@
 #       to edit; diff them against upstream by hand if you want engine-side wording
 #       updates (see the footer).
 #
-#   .claude/settings.json is DELIBERATELY personal. It was written at stamp time with
-#   this project's absolute path substituted in. Refreshing it would restore the raw
-#   template placeholder and silently disable every hook.
+#   .claude/settings.json is DELIBERATELY personal. Projects stamped before v1.23.0 have
+#   their absolute path substituted in (newer ones use ${CLAUDE_PROJECT_DIR}), and you may
+#   have added your own hooks or permissions there. Refreshing it would overwrite both.
 #
 # Don't hand-edit machinery files — they get overwritten here. Customize via the
 # personal layer (identity / AGENTS / CLAUDE) instead.

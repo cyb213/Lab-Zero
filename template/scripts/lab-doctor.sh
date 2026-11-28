@@ -145,9 +145,9 @@ else
   fi
 
   # ALWAYS print, even when every file is OK (Rule-Zero / D-009): a green files-check must
-  # never be read as "recall fires" — Codex trust is granted interactively and is not
-  # verifiable here. This INFO line is the honest ceiling.
-  emit INFO "codex:trust" "files only — run /hooks in Codex to trust (not verifiable here)" ""
+  # never be read as "recall fires" — Codex trust (project + each hook) lives in the user's
+  # own Codex config and is not verifiable here. This INFO line is the honest ceiling.
+  emit INFO "codex:trust" "files only — in Codex, trust the project, then approve hooks via /hooks (headless: see README); not verifiable here" ""
 fi
 
 echo

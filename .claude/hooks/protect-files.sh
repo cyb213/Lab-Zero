@@ -14,17 +14,31 @@
 #
 # Codex caveat: the PreToolUse hook-stdin envelope key for apply_patch is not yet
 # version-pinned, so the Codex branch reads the patch DEFENSIVELY (tool_input.command,
-# then .input, then any string value, then raw stdin). It is best-effort: on Codex
+# then .input, then any string value, then raw stdin). Delivery is best-effort: on Codex
 # versions that don't surface apply_patch edits to PreToolUse, the edit never reaches
-# this hook (fails open). The Claude path is read first and independently, so a Codex
-# parse miss can never turn a Claude block into an allow.
+# this hook. The Claude path is read first and independently, so a Codex parse miss can
+# never turn a Claude block into an allow.
+#
+# Fails CLOSED (D-114): if the check itself can't run — no python3, or python3 exits with
+# anything but 0 (allow) / 2 (block) — the edit is refused (exit 2) with a BLOCKED message,
+# rather than let through. The payload reaches python on STDIN, never via an env var or
+# argv (one env string over ~128 KiB fails execve with E2BIG — that used to let every large
+# write through, .env included). A missing script or a timeout can't be caught from in
+# here; Claude's settings set "onFailure": "block" on this hook for that (Claude Code
+# >= 2.1.295).
 
-INPUT=$(cat)
+LZ_REFUSED="This edit was refused to be safe. Don't work around this with a shell command; tell the user."
 
-LZ_HOOK_INPUT="$INPUT" python3 - <<'PY'
+if ! command -v python3 >/dev/null 2>&1; then
+  cat >/dev/null   # drain stdin so the harness's write never hits a closed pipe
+  echo "BLOCKED: protect-files.sh could not run its check: python3 was not found. $LZ_REFUSED The fix is to install Python 3.9+." >&2
+  exit 2
+fi
+
+read -r -d '' LZ_PROTECT_PY <<'PY'
 import os, re, sys, json
 
-raw = os.environ.get("LZ_HOOK_INPUT", "")
+raw = sys.stdin.read()
 
 PROTECTED_PATTERNS = (".env", "recall.config.json")
 
@@ -97,3 +111,11 @@ if patch:
 
 sys.exit(0)
 PY
+
+python3 -c "$LZ_PROTECT_PY"   # the hook payload arrives on this script's stdin, untouched
+rc=$?
+case "$rc" in
+  0|2) exit "$rc" ;;
+esac
+echo "BLOCKED: protect-files.sh could not complete its check (python3 exited $rc; see the error above). $LZ_REFUSED The fix is to repair the python3 install." >&2
+exit 2

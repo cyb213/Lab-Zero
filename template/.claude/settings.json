@@ -1,32 +1,32 @@
 {
-  "//": "Hook wiring for a stamped project. new-project.sh replaces __WORKSPACE__ with the absolute project root. Merge into any existing settings rather than clobbering.",
+  "//": "Hook wiring for a stamped project. Each command uses ${CLAUDE_PROJECT_DIR}, which Claude Code resolves to this folder, so moving or re-cloning it needs no re-wire for Claude. The file-protection hook sets onFailure to block (Claude Code 2.1.295+): if its check can't run, edits are refused instead of let through. Codex gets its own copy with absolute paths in .codex/hooks.json from bootstrap.sh --harness; after a move, re-run that and re-approve the hooks in Codex's /hooks review. Merge into any existing settings rather than clobbering.",
   "hooks": {
     "PreToolUse": [
       {
         "matcher": "Edit|Write|NotebookEdit",
         "hooks": [
-          { "type": "command", "command": "bash __WORKSPACE__/.claude/hooks/protect-files.sh" }
+          { "type": "command", "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/protect-files.sh", "onFailure": "block" }
         ]
       }
     ],
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "bash __WORKSPACE__/scripts/hooks/recall-session-start.sh" }
+          { "type": "command", "command": "bash ${CLAUDE_PROJECT_DIR}/scripts/hooks/recall-session-start.sh" }
         ]
       }
     ],
     "UserPromptSubmit": [
       {
         "hooks": [
-          { "type": "command", "command": "bash __WORKSPACE__/scripts/hooks/recall-user-prompt.sh" }
+          { "type": "command", "command": "bash ${CLAUDE_PROJECT_DIR}/scripts/hooks/recall-user-prompt.sh" }
         ]
       }
     ],
     "Stop": [
       {
         "hooks": [
-          { "type": "command", "command": "bash __WORKSPACE__/scripts/hooks/recall-stop.sh" }
+          { "type": "command", "command": "bash ${CLAUDE_PROJECT_DIR}/scripts/hooks/recall-stop.sh" }
         ]
       }
     ]

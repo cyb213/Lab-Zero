@@ -19,14 +19,19 @@
 # resolve nothing — Codex would get NO identity, with no error. Asserted byte-exact,
 # both shapes, in tests/test_codex_stamp.sh.
 
-# ── Claude wiring (committed-substitute, unchanged): __WORKSPACE__ -> abs path ──
+# ── Claude wiring ──
+# Since D-114 the shipped settings.json uses ${CLAUDE_PROJECT_DIR} (Claude Code resolves it
+# to the project root) ⇒ nothing to substitute, and a moved / re-cloned folder stays wired.
+# The __WORKSPACE__ -> abs-path branch stays for checkouts of older releases.
 wire_claude() {
   ROOT="$ROOT" python3 - <<'PY'
 import json, os, pathlib
 root = os.environ["ROOT"]
 p = pathlib.Path(root) / ".claude" / "settings.json"
 t = p.read_text()
-if "__WORKSPACE__" in t:
+if "${CLAUDE_PROJECT_DIR}" in t and "__WORKSPACE__" not in t:
+    print("[bootstrap]   Claude hooks use ${CLAUDE_PROJECT_DIR} — nothing to substitute")
+elif "__WORKSPACE__" in t:
     # json.dumps(root)[1:-1] = the path as a JSON string-literal body — a `"` or `\`
     # in the workspace path stays valid JSON (E2, W2/D-074; the D-070 idiom from
     # new-project.sh). Byte-identical to the raw path for quote/backslash-free ASCII.
@@ -51,7 +56,7 @@ cdir = R / ".codex"
 cdir.mkdir(exist_ok=True)
 
 # (a) recall hooks — lift the recall events out of .claude/settings.json (.hooks)
-#     (schema is identical to Codex's hooks.json) and substitute __WORKSPACE__.
+#     (schema is identical to Codex's hooks.json) and substitute the root (below).
 settings = json.loads((R / ".claude" / "settings.json").read_text())
 src = settings.get("hooks", {})
 RECALL = ("SessionStart", "UserPromptSubmit", "Stop")
@@ -74,8 +79,24 @@ for entry in src.get("PreToolUse", []):
 if prot:
     hooks["PreToolUse"] = prot
 
-# the JSON-escaped body, not the raw path — same E2 guard as wire_claude above
-blob = json.dumps({"hooks": hooks}, indent=2).replace("__WORKSPACE__", json.dumps(root)[1:-1])
+# (a3) D-114: strip "onFailure" from every handler. Codex trusts a hook by a hash of its
+#      PARSED handler (hooks/src/engine/discovery.rs hook_hash): 0.172.0 drops the key before
+#      hashing, but from 0.174 it is hashed — so emitting it would flip an already-trusted
+#      hook to Modified (off until re-approved in /hooks) on a Codex upgrade. The shared
+#      script's own fail-closed guard covers Codex instead. Revisit once 0.174 is stable.
+hooks = json.loads(json.dumps(hooks))                # deep copy (recall events were shared refs)
+for groups in hooks.values():
+    for g in groups:
+        for hk in g.get("hooks", []):
+            hk.pop("onFailure", None)
+
+# the JSON-escaped body, not the raw path — same E2 guard as wire_claude above. Both the
+# legacy __WORKSPACE__ token and the D-114 ${CLAUDE_PROJECT_DIR} placeholder become the
+# absolute root, so Codex gets exactly the command string it got before D-114 (same hash).
+body = json.dumps(root)[1:-1]
+blob = (json.dumps({"hooks": hooks}, indent=2)
+        .replace("__WORKSPACE__", body)
+        .replace("${CLAUDE_PROJECT_DIR}", body))
 (cdir / "hooks.json").write_text(blob + "\n")
 
 # (b) feature flag — ensure features.hooks = true in .codex/config.toml via a

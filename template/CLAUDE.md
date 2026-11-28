@@ -6,5 +6,5 @@
 
 ## Claude Code specifics
 - **Skills:** the ceremonies ship in `.claude/skills/` as committed copies so a fresh clone works on Claude Code immediately. The canonical copies live in `.agents/skills/` (what other agents auto-discover; one directory per skill — that directory is the always-current list) — the two are kept identical.
-- **Automation:** recall (session-start / prompt / stop) and the file-protection hook are wired through `.claude/settings.json`; your absolute workspace path is substituted into it when the project is stamped.
+- **Automation:** recall (session-start / prompt / stop) and the file-protection hook are wired through `.claude/settings.json`, whose commands use `${CLAUDE_PROJECT_DIR}`, so they follow the project wherever it lives. If the file-protection check can't run, it refuses edits instead of letting them through.
 - **Identity:** loaded via `@AGENTS.md` above (which imports `@identity/IDENTITY.md`) — no separate import needed here.
