@@ -4,6 +4,20 @@ All notable changes to Lab Zero. Newest first. Versions follow [semantic version
 
 This file is what `update.sh --check` reads to show you what's new in a release — so each entry is a short, user-facing summary of what changed, not an internal commit log.
 
+## v1.23.1 — 2026-11-28
+
+**Updating to this release:** one `bash update.sh` run refreshes the README and the drift check's baseline. There is one hand edit in your Lab's own `AGENTS.md`, described below. v1.23.0 said nothing in your own `AGENTS.md` changes; that missed the line this release fixes.
+
+- **Your Lab's `AGENTS.md` no longer says both harnesses ask before acting.** v1.23.0 corrected this claim in PERMISSIONS.md and the README, but the Permissions bullet in your Lab's `AGENTS.md` still made it. That's the file your agent reads every session. Claude Code v2.1.283 or later starts interactive sessions in `auto` mode, and Codex's default preset edits inside the workspace without asking. The bullet now says each harness keeps its own defaults and points to PERMISSIONS.md for what each one does.
+- **The README no longer says shell writes are gated by command approval.** The file-protection hook guards the structured edit tools, not raw shell. Whether a shell write is stopped depends on your permission settings, and by default neither harness asks first.
+
+**Your AGENTS.md.** After updating, the drift check names the line that changed. Projects aren't affected; only your Lab's `AGENTS.md` carries this bullet. If the line still reads exactly the old text, replace it:
+
+- old: `- **Permissions (Claude Code + Codex):** Lab Zero ships no permission overrides — both harnesses ask before acting by default, which is the safe choice. If you also run Codex and want to match a posture across them, see [PERMISSIONS.md](PERMISSIONS.md) (a by-hand orientation map; nothing is auto-translated).`
+- new: `- **Permissions (Claude Code + Codex):** Lab Zero ships no permission overrides, so each harness keeps its own defaults, and the two differ. [PERMISSIONS.md](PERMISSIONS.md) says what each does out of the box and how to match a posture across them by hand (nothing is auto-translated).`
+
+**If you use Codex, re-run the harness wiring after you edit `AGENTS.md`**, not before. Codex reads `AGENTS.override.md`, a copy of `AGENTS.md` made at wiring time, so it keeps the old line until you re-wire: `LAB_BOOTSTRAP_SKIP_ENGINE=1 bash <your workspace>/bootstrap.sh --harness <your harness set>`.
+
 ## v1.23.0 — 2026-11-28
 
 **Updating to this release:** one `bash update.sh` run refreshes the README, PERMISSIONS.md, `bootstrap.sh`, `lab doctor` and the file-protection hook (`.claude/hooks/protect-files.sh`). Nothing in your own `AGENTS.md` changes, and Codex needs no re-wire for this release. The new Codex trust text in `bootstrap.sh` shows the next time you run it. Two optional hand edits are described under **Your own files** below.
